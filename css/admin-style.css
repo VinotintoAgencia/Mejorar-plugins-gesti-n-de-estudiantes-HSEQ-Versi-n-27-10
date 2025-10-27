@@ -20,7 +20,12 @@
 }
 
 .gcp-student-edit-row {
+  display: none;
   background-color: #fffdf5;
+}
+
+.gcp-student-edit-row.is-open {
+  display: table-row;
 }
 
 .gcp-student-edit-form {

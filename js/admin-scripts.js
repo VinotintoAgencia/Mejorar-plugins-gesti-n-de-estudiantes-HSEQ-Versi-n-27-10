@@ -238,16 +238,41 @@ jQuery(function($) {
   // 5) Gestión del módulo de estudiantes inscritos
   $(document).on('click', '.gcp-toggle-edit', function(e) {
     e.preventDefault();
-    const targetId = $(this).data('target');
+    const $button = $(this);
+    const targetId = $button.data('target');
     if (!targetId) return;
-    $(`#${targetId}`).stop(true, true).slideToggle(200);
+
+    const $row = $(`#${targetId}`);
+    const willOpen = !$row.hasClass('is-open');
+
+    // Close any other open rows to keep the interface tidy.
+    $('.gcp-student-edit-row.is-open').not($row).each(function() {
+      $(this)
+        .removeClass('is-open')
+        .attr('aria-hidden', 'true');
+      const otherId = $(this).attr('id');
+      $(`.gcp-toggle-edit[data-target="${otherId}"]`).attr('aria-expanded', 'false');
+    });
+
+    $row.toggleClass('is-open', willOpen).attr('aria-hidden', willOpen ? 'false' : 'true');
+    $button.attr('aria-expanded', willOpen ? 'true' : 'false');
+
+    if (willOpen) {
+      const $firstInput = $row.find('input, select, textarea').filter(':visible').first();
+      if ($firstInput.length) {
+        setTimeout(() => $firstInput.trigger('focus'), 0);
+      }
+    }
   });
 
   $(document).on('click', '.gcp-cancel-edit', function(e) {
     e.preventDefault();
     const targetId = $(this).data('target');
     if (!targetId) return;
-    $(`#${targetId}`).slideUp(200);
+
+    const $row = $(`#${targetId}`);
+    $row.removeClass('is-open').attr('aria-hidden', 'true');
+    $(`.gcp-toggle-edit[data-target="${targetId}"]`).attr('aria-expanded', 'false').trigger('focus');
   });
 
   $(document).on('submit', '.gcp-student-edit-form', function(e) {

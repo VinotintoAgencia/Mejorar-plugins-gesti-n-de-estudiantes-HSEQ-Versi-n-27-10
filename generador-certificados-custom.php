@@ -1722,12 +1722,12 @@ function gcp_render_estudiantes_inscritos_page() {
                             ?>
                             <td><?php echo esc_html( $date_display ); ?></td>
                             <td>
-                                <button type="button" class="button gcp-toggle-edit" data-target="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>">
+                                <button type="button" class="button gcp-toggle-edit" data-target="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>" aria-expanded="false" aria-controls="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>">
                                     <?php _e( 'Editar', 'gcp-generador-cert' ); ?>
                                 </button>
                             </td>
                         </tr>
-                        <tr id="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>" class="gcp-student-edit-row" style="display:none;">
+                        <tr id="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>" class="gcp-student-edit-row" aria-hidden="true">
                             <td colspan="8">
                                 <form method="post" class="gcp-student-edit-form">
                                     <?php wp_nonce_field( 'gcp_edit_verification', 'gcp_edit_verification_nonce' ); ?>
