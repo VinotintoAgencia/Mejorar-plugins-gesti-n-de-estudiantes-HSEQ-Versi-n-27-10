@@ -1647,6 +1647,22 @@ function gcp_render_estudiantes_inscritos_page() {
         $registros = $wpdb->get_results( $sql );
     }
 
+    $current_edit_id = isset( $_GET['edit_id'] ) ? intval( $_GET['edit_id'] ) : 0;
+    if ( ! $current_edit_id && ! empty( $_POST['gcp_record_id'] ) ) {
+        $current_edit_id = intval( $_POST['gcp_record_id'] );
+    }
+
+    $base_query_args = array(
+        'page' => 'gcp_estudiantes_inscritos',
+    );
+
+    if ( ! empty( $search_cedula ) ) {
+        $base_query_args['s_cedula'] = $search_cedula;
+    }
+    if ( ! empty( $search_nit ) ) {
+        $base_query_args['s_nit'] = $search_nit;
+    }
+
     $export_url = add_query_arg(
         array(
             'page'       => 'gcp_estudiantes_inscritos',
@@ -1704,6 +1720,16 @@ function gcp_render_estudiantes_inscritos_page() {
             <tbody>
                 <?php if ( ! empty( $registros ) ) : ?>
                     <?php foreach ( $registros as $reg ) : ?>
+                        <?php
+                        $is_open          = ( intval( $reg->id ) === $current_edit_id );
+                        $edit_query_args  = $base_query_args;
+                        $edit_query_args['edit_id'] = $reg->id;
+                        $edit_url         = add_query_arg( $edit_query_args, admin_url( 'admin.php' ) );
+                        $cancel_url       = add_query_arg( $base_query_args, admin_url( 'admin.php' ) );
+                        $aria_expanded    = $is_open ? 'true' : 'false';
+                        $edit_row_classes = 'gcp-student-edit-row' . ( $is_open ? ' is-open' : '' );
+                        $edit_row_attrs   = $is_open ? ' aria-hidden="false"' : ' aria-hidden="true" hidden';
+                        ?>
                         <tr>
                             <td><?php echo esc_html( $reg->cedula_alumno ); ?></td>
                             <td><?php echo esc_html( trim( $reg->first_name . ' ' . $reg->last_name ) ); ?></td>
@@ -1722,12 +1748,18 @@ function gcp_render_estudiantes_inscritos_page() {
                             ?>
                             <td><?php echo esc_html( $date_display ); ?></td>
                             <td>
-                                <button type="button" class="button gcp-toggle-edit" data-target="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>" aria-expanded="false" aria-controls="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>">
+                                <a
+                                    class="button gcp-toggle-edit"
+                                    href="<?php echo esc_url( $edit_url ); ?>"
+                                    data-target="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>"
+                                    aria-expanded="<?php echo esc_attr( $aria_expanded ); ?>"
+                                    aria-controls="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>"
+                                >
                                     <?php _e( 'Editar', 'gcp-generador-cert' ); ?>
-                                </button>
+                                </a>
                             </td>
                         </tr>
-                        <tr id="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>" class="gcp-student-edit-row" aria-hidden="true" hidden>
+                        <tr id="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>" class="<?php echo esc_attr( $edit_row_classes ); ?>"<?php echo $edit_row_attrs; ?>>
                             <td colspan="8">
                                 <form method="post" class="gcp-student-edit-form">
                                     <?php wp_nonce_field( 'gcp_edit_verification', 'gcp_edit_verification_nonce' ); ?>
@@ -1773,9 +1805,14 @@ function gcp_render_estudiantes_inscritos_page() {
                                         <button type="submit" class="button button-primary">
                                             <?php _e( 'Guardar cambios', 'gcp-generador-cert' ); ?>
                                         </button>
-                                        <button type="button" class="button gcp-cancel-edit" data-target="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>">
+                                        <a
+                                            href="<?php echo esc_url( $cancel_url ); ?>"
+                                            class="button gcp-cancel-edit"
+                                            data-target="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>"
+                                            aria-controls="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>"
+                                        >
                                             <?php _e( 'Cancelar', 'gcp-generador-cert' ); ?>
-                                        </button>
+                                        </a>
                                     </p>
                                 </form>
                             </td>

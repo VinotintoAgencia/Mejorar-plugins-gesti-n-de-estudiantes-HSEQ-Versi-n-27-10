@@ -252,13 +252,78 @@ jQuery(function($) {
     }
   }
 
+  function updateEditQueryParam(recordId) {
+    if (!window.history || !window.history.replaceState) {
+      return;
+    }
+
+    var href = window.location.href;
+    var hashIndex = href.indexOf('#');
+    var hash = '';
+    if (hashIndex !== -1) {
+      hash = href.substring(hashIndex);
+      href = href.substring(0, hashIndex);
+    }
+
+    if (typeof URLSearchParams !== 'undefined') {
+      var urlParts = href.split('?');
+      var base = urlParts[0];
+      var params = new URLSearchParams(urlParts[1] || '');
+      if (recordId) {
+        params.set('edit_id', recordId);
+      } else {
+        params.delete('edit_id');
+      }
+      var query = params.toString();
+      var newHref = query ? base + '?' + query : base;
+      window.history.replaceState({}, '', newHref + hash);
+      return;
+    }
+
+    var queryIndex = href.indexOf('?');
+    var baseHref = queryIndex !== -1 ? href.substring(0, queryIndex) : href;
+    var search = queryIndex !== -1 ? href.substring(queryIndex + 1) : '';
+    var segments = search ? search.split('&') : [];
+    var key = 'edit_id=';
+    var replaced = false;
+    var cleaned = [];
+
+    for (var i = 0; i < segments.length; i += 1) {
+      if (segments[i].indexOf(key) === 0) {
+        if (recordId) {
+          cleaned.push(key + encodeURIComponent(recordId));
+        }
+        replaced = true;
+      } else if (segments[i]) {
+        cleaned.push(segments[i]);
+      }
+    }
+
+    if (!replaced && recordId) {
+      cleaned.push(key + encodeURIComponent(recordId));
+    }
+
+    var newUrl = baseHref;
+    if (cleaned.length) {
+      newUrl += '?' + cleaned.join('&');
+    }
+    window.history.replaceState({}, '', newUrl + hash);
+  }
+
   $(document).on('click', '.gcp-toggle-edit', function(e) {
-    e.preventDefault();
     const $button = $(this);
     const targetId = $button.data('target');
-    if (!targetId) return;
+    if (!targetId) {
+      return;
+    }
 
     const $row = $(`#${targetId}`);
+    if (!$row.length) {
+      return;
+    }
+
+    e.preventDefault();
+
     const willOpen = !$row.hasClass('is-open');
 
     // Close any other open rows to keep the interface tidy.
@@ -273,20 +338,34 @@ jQuery(function($) {
     $button.attr('aria-expanded', willOpen ? 'true' : 'false');
 
     if (willOpen) {
+      const idFragment = targetId.replace('gcp-edit-row-', '');
+      updateEditQueryParam(idFragment);
       const $firstInput = $row.find('input, select, textarea').filter(':visible').first();
       if ($firstInput.length) {
-        setTimeout(() => $firstInput.trigger('focus'), 0);
+        setTimeout(function() {
+          $firstInput.trigger('focus');
+        }, 0);
       }
+    } else {
+      updateEditQueryParam('');
     }
   });
 
   $(document).on('click', '.gcp-cancel-edit', function(e) {
-    e.preventDefault();
-    const targetId = $(this).data('target');
-    if (!targetId) return;
+    const $link = $(this);
+    const targetId = $link.data('target');
+    if (!targetId) {
+      return;
+    }
 
     const $row = $(`#${targetId}`);
+    if (!$row.length) {
+      return;
+    }
+
+    e.preventDefault();
     setEditRowState($row, false);
+    updateEditQueryParam('');
     $(`.gcp-toggle-edit[data-target="${targetId}"]`).attr('aria-expanded', 'false').trigger('focus');
   });
 
