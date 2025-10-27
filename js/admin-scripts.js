@@ -101,12 +101,13 @@ jQuery(function($) {
     }, 'json')
     .done(function(resp) {
       removeSpinners();
-      if (!resp.success || !resp.data) {
-        const msg = resp.data?.message || 'No se encontró el contacto.';
+      const data = resp && resp.data ? resp.data : null;
+      if (!resp.success || !data) {
+        const msg = data && data.message ? data.message : 'No se encontró el contacto.';
         return alert(msg);
       }
 
-      const c = resp.data;
+      const c = data;
       $('#gcp_nombre_completo').val(`${c.first_name || ''} ${c.last_name || ''}`.trim());
       $('#gcp_email').val(c.email || '');
 
@@ -171,7 +172,9 @@ jQuery(function($) {
     .done(function(resp) {
       removeSpinners();
       const cls = resp.success ? 'notice-success' : 'notice-error';
-      const msg = resp.data?.message || (resp.success ? 'Verificación registrada.' : 'Error al registrar.');
+      const data = resp && resp.data ? resp.data : null;
+      const fallbackMsg = resp.success ? 'Verificación registrada.' : 'Error al registrar.';
+      const msg = data && data.message ? data.message : fallbackMsg;
       $pdfContainer.html(`<div class="notice ${cls} is-dismissible"><p>${msg}</p></div>`);
     })
     .fail(function() {
@@ -213,17 +216,18 @@ jQuery(function($) {
     })
     .done(function(resp) {
       removeSpinners();
-      if (resp.success && resp.data?.pdf_url) {
-        const fn = resp.data.file_name || 'certificado.pdf';
+      const data = resp && resp.data ? resp.data : null;
+      if (resp.success && data && data.pdf_url) {
+        const fn = data.file_name || 'certificado.pdf';
         $pdfContainer.html(`
-          <p>PDF generado: 
-            <a href="${resp.data.pdf_url}" download="${fn}" target="_blank" class="button">
+          <p>PDF generado:
+            <a href="${data.pdf_url}" download="${fn}" target="_blank" class="button">
               Descargar/Ver
             </a>
           </p>
         `);
       } else {
-        const msg = resp.data?.message || 'No se recibió URL de PDF.';
+        const msg = data && data.message ? data.message : 'No se recibió URL de PDF.';
         $pdfContainer.html(`<p style="color:orange;">${msg}</p>`);
         console.error('Generación PDF:', resp);
       }
@@ -241,7 +245,9 @@ jQuery(function($) {
     $row.attr('aria-hidden', isOpen ? 'false' : 'true');
     if (isOpen) {
       $row.prop('hidden', false).removeAttr('hidden');
+      $row.css('display', 'table-row');
     } else {
+      $row.css('display', 'none');
       $row.prop('hidden', true).attr('hidden', 'hidden');
     }
   }
