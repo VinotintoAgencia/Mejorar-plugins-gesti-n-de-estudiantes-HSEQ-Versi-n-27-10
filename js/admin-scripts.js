@@ -235,4 +235,26 @@ jQuery(function($) {
     });
   });
 
+  // 5) Gestión del módulo de estudiantes inscritos
+  $(document).on('click', '.gcp-toggle-edit', function(e) {
+    e.preventDefault();
+    const targetId = $(this).data('target');
+    if (!targetId) return;
+    $(`#${targetId}`).stop(true, true).slideToggle(200);
+  });
+
+  $(document).on('click', '.gcp-cancel-edit', function(e) {
+    e.preventDefault();
+    const targetId = $(this).data('target');
+    if (!targetId) return;
+    $(`#${targetId}`).slideUp(200);
+  });
+
+  $(document).on('submit', '.gcp-student-edit-form', function(e) {
+    const confirmMessage = '¿Estás seguro de que deseas guardar estos cambios? Se actualizará el registro en la base de datos.';
+    if (!window.confirm(confirmMessage)) {
+      e.preventDefault();
+    }
+  });
+
 });
