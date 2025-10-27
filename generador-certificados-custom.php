@@ -1727,7 +1727,7 @@ function gcp_render_estudiantes_inscritos_page() {
                                 </button>
                             </td>
                         </tr>
-                        <tr id="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>" class="gcp-student-edit-row" aria-hidden="true">
+                        <tr id="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>" class="gcp-student-edit-row" aria-hidden="true" hidden>
                             <td colspan="8">
                                 <form method="post" class="gcp-student-edit-form">
                                     <?php wp_nonce_field( 'gcp_edit_verification', 'gcp_edit_verification_nonce' ); ?>
