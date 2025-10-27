@@ -236,6 +236,16 @@ jQuery(function($) {
   });
 
   // 5) Gestión del módulo de estudiantes inscritos
+  function setEditRowState($row, isOpen) {
+    $row.toggleClass('is-open', isOpen);
+    $row.attr('aria-hidden', isOpen ? 'false' : 'true');
+    if (isOpen) {
+      $row.prop('hidden', false).removeAttr('hidden');
+    } else {
+      $row.prop('hidden', true).attr('hidden', 'hidden');
+    }
+  }
+
   $(document).on('click', '.gcp-toggle-edit', function(e) {
     e.preventDefault();
     const $button = $(this);
@@ -247,23 +257,13 @@ jQuery(function($) {
 
     // Close any other open rows to keep the interface tidy.
     $('.gcp-student-edit-row.is-open').not($row).each(function() {
-      $(this)
-        .removeClass('is-open')
-        .attr('aria-hidden', 'true')
-        .attr('hidden', 'hidden');
-      const otherId = $(this).attr('id');
+      const $other = $(this);
+      setEditRowState($other, false);
+      const otherId = $other.attr('id');
       $(`.gcp-toggle-edit[data-target="${otherId}"]`).attr('aria-expanded', 'false');
     });
 
-    $row
-      .toggleClass('is-open', willOpen)
-      .attr('aria-hidden', willOpen ? 'false' : 'true');
-
-    if (willOpen) {
-      $row.removeAttr('hidden');
-    } else {
-      $row.attr('hidden', 'hidden');
-    }
+    setEditRowState($row, willOpen);
     $button.attr('aria-expanded', willOpen ? 'true' : 'false');
 
     if (willOpen) {
@@ -280,7 +280,7 @@ jQuery(function($) {
     if (!targetId) return;
 
     const $row = $(`#${targetId}`);
-    $row.removeClass('is-open').attr({ 'aria-hidden': 'true', hidden: 'hidden' });
+    setEditRowState($row, false);
     $(`.gcp-toggle-edit[data-target="${targetId}"]`).attr('aria-expanded', 'false').trigger('focus');
   });
 
