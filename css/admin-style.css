@@ -1,0 +1,20 @@
+#gcp-certificate-form .form-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+#gcp-certificate-form .form-table tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+#gcp-certificate-form .form-table th,
+#gcp-certificate-form .form-table td {
+  padding: 8px 10px;
+}
+#gcp-certificate-form input.regular-text {
+  width: 100%;
+  max-width: 400px;
+}
+#gcp-certificate-preview {
+  background: #fff;
+  border: 1px solid #ccc;
+  padding: 20px;
+}

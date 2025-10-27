@@ -1,0 +1,12 @@
+#gcp-student-certs-container form {
+  margin-bottom: 15px;
+}
+#gcp-student-certs-results .gcp-cert-card {
+  border: 1px solid #ccc;
+  background: #fff;
+  padding: 10px;
+  margin-bottom: 15px;
+}
+#gcp-student-certs-results .gcp-cert-card p {
+  margin: 4px 0;
+}
