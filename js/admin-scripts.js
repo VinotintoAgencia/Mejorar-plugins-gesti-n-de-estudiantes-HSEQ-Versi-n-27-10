@@ -101,12 +101,13 @@ jQuery(function($) {
     }, 'json')
     .done(function(resp) {
       removeSpinners();
-      if (!resp.success || !resp.data) {
-        const msg = resp.data?.message || 'No se encontró el contacto.';
+      const data = resp && resp.data ? resp.data : null;
+      if (!resp.success || !data) {
+        const msg = data && data.message ? data.message : 'No se encontró el contacto.';
         return alert(msg);
       }
 
-      const c = resp.data;
+      const c = data;
       $('#gcp_nombre_completo').val(`${c.first_name || ''} ${c.last_name || ''}`.trim());
       $('#gcp_email').val(c.email || '');
 
@@ -171,7 +172,9 @@ jQuery(function($) {
     .done(function(resp) {
       removeSpinners();
       const cls = resp.success ? 'notice-success' : 'notice-error';
-      const msg = resp.data?.message || (resp.success ? 'Verificación registrada.' : 'Error al registrar.');
+      const data = resp && resp.data ? resp.data : null;
+      const fallbackMsg = resp.success ? 'Verificación registrada.' : 'Error al registrar.';
+      const msg = data && data.message ? data.message : fallbackMsg;
       $pdfContainer.html(`<div class="notice ${cls} is-dismissible"><p>${msg}</p></div>`);
     })
     .fail(function() {
@@ -213,17 +216,18 @@ jQuery(function($) {
     })
     .done(function(resp) {
       removeSpinners();
-      if (resp.success && resp.data?.pdf_url) {
-        const fn = resp.data.file_name || 'certificado.pdf';
+      const data = resp && resp.data ? resp.data : null;
+      if (resp.success && data && data.pdf_url) {
+        const fn = data.file_name || 'certificado.pdf';
         $pdfContainer.html(`
-          <p>PDF generado: 
-            <a href="${resp.data.pdf_url}" download="${fn}" target="_blank" class="button">
+          <p>PDF generado:
+            <a href="${data.pdf_url}" download="${fn}" target="_blank" class="button">
               Descargar/Ver
             </a>
           </p>
         `);
       } else {
-        const msg = resp.data?.message || 'No se recibió URL de PDF.';
+        const msg = data && data.message ? data.message : 'No se recibió URL de PDF.';
         $pdfContainer.html(`<p style="color:orange;">${msg}</p>`);
         console.error('Generación PDF:', resp);
       }
@@ -233,6 +237,143 @@ jQuery(function($) {
       $pdfContainer.html('<p style="color:red;">Error al generar PDF.</p>');
       console.error('Error AJAX (generar PDF):', textStatus, jqXHR);
     });
+  });
+
+  // 5) Gestión del módulo de estudiantes inscritos
+  function setEditRowState($row, isOpen) {
+    $row.toggleClass('is-open', isOpen);
+    $row.attr('aria-hidden', isOpen ? 'false' : 'true');
+    if (isOpen) {
+      $row.prop('hidden', false).removeAttr('hidden');
+      $row.css('display', 'table-row');
+    } else {
+      $row.css('display', 'none');
+      $row.prop('hidden', true).attr('hidden', 'hidden');
+    }
+  }
+
+  function updateEditQueryParam(recordId) {
+    if (!window.history || !window.history.replaceState) {
+      return;
+    }
+
+    var href = window.location.href;
+    var hashIndex = href.indexOf('#');
+    var hash = '';
+    if (hashIndex !== -1) {
+      hash = href.substring(hashIndex);
+      href = href.substring(0, hashIndex);
+    }
+
+    if (typeof URLSearchParams !== 'undefined') {
+      var urlParts = href.split('?');
+      var base = urlParts[0];
+      var params = new URLSearchParams(urlParts[1] || '');
+      if (recordId) {
+        params.set('edit_id', recordId);
+      } else {
+        params.delete('edit_id');
+      }
+      var query = params.toString();
+      var newHref = query ? base + '?' + query : base;
+      window.history.replaceState({}, '', newHref + hash);
+      return;
+    }
+
+    var queryIndex = href.indexOf('?');
+    var baseHref = queryIndex !== -1 ? href.substring(0, queryIndex) : href;
+    var search = queryIndex !== -1 ? href.substring(queryIndex + 1) : '';
+    var segments = search ? search.split('&') : [];
+    var key = 'edit_id=';
+    var replaced = false;
+    var cleaned = [];
+
+    for (var i = 0; i < segments.length; i += 1) {
+      if (segments[i].indexOf(key) === 0) {
+        if (recordId) {
+          cleaned.push(key + encodeURIComponent(recordId));
+        }
+        replaced = true;
+      } else if (segments[i]) {
+        cleaned.push(segments[i]);
+      }
+    }
+
+    if (!replaced && recordId) {
+      cleaned.push(key + encodeURIComponent(recordId));
+    }
+
+    var newUrl = baseHref;
+    if (cleaned.length) {
+      newUrl += '?' + cleaned.join('&');
+    }
+    window.history.replaceState({}, '', newUrl + hash);
+  }
+
+  $(document).on('click', '.gcp-toggle-edit', function(e) {
+    const $button = $(this);
+    const targetId = $button.data('target');
+    if (!targetId) {
+      return;
+    }
+
+    const $row = $(`#${targetId}`);
+    if (!$row.length) {
+      return;
+    }
+
+    e.preventDefault();
+
+    const willOpen = !$row.hasClass('is-open');
+
+    // Close any other open rows to keep the interface tidy.
+    $('.gcp-student-edit-row.is-open').not($row).each(function() {
+      const $other = $(this);
+      setEditRowState($other, false);
+      const otherId = $other.attr('id');
+      $(`.gcp-toggle-edit[data-target="${otherId}"]`).attr('aria-expanded', 'false');
+    });
+
+    setEditRowState($row, willOpen);
+    $button.attr('aria-expanded', willOpen ? 'true' : 'false');
+
+    if (willOpen) {
+      const idFragment = targetId.replace('gcp-edit-row-', '');
+      updateEditQueryParam(idFragment);
+      const $firstInput = $row.find('input, select, textarea').filter(':visible').first();
+      if ($firstInput.length) {
+        setTimeout(function() {
+          $firstInput.trigger('focus');
+        }, 0);
+      }
+    } else {
+      updateEditQueryParam('');
+    }
+  });
+
+  $(document).on('click', '.gcp-cancel-edit', function(e) {
+    const $link = $(this);
+    const targetId = $link.data('target');
+    if (!targetId) {
+      return;
+    }
+
+    const $row = $(`#${targetId}`);
+    if (!$row.length) {
+      return;
+    }
+
+    e.preventDefault();
+    setEditRowState($row, false);
+    updateEditQueryParam('');
+    $(`.gcp-toggle-edit[data-target="${targetId}"]`).attr('aria-expanded', 'false').trigger('focus');
+  });
+
+  $(document).on('submit', '.gcp-student-edit-form', function(e) {
+    const confirmMessage = '¿Estás seguro de que deseas guardar estos cambios? Se actualizará el registro en la base de datos.';
+    if (!window.confirm(confirmMessage)) {
+      e.preventDefault();
+    }
   });
 
 });

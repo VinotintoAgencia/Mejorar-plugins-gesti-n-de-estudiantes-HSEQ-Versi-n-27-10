@@ -18,3 +18,38 @@
   border: 1px solid #ccc;
   padding: 20px;
 }
+
+.gcp-student-edit-row {
+  display: none;
+  background-color: #fffdf5;
+}
+
+.gcp-student-edit-row.is-open {
+  display: table-row;
+}
+
+.gcp-student-edit-form {
+  border: 1px solid #f0b849;
+  padding: 15px;
+  background-color: #fff9ec;
+}
+
+.gcp-student-edit-form .gcp-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 15px;
+  margin: 15px 0;
+}
+
+.gcp-student-edit-form label {
+  font-weight: 600;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.gcp-edit-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
