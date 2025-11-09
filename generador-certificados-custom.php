@@ -1459,6 +1459,400 @@ function gcp_render_verificacion_admision_page() {
     <?php
 }
 
+add_action( 'admin_init', 'gcp_handle_update_student_record' );
+
+/**
+ * Handle inline updates for the students table.
+ */
+function gcp_handle_update_student_record() {
+    if ( empty( $_POST['gcp_edit_verification_nonce'] ) ) {
+        return;
+    }
+
+    if ( empty( $_POST['page'] ) || 'gcp_estudiantes_inscritos' !== $_POST['page'] ) {
+        return;
+    }
+
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+
+    check_admin_referer( 'gcp_edit_verification', 'gcp_edit_verification_nonce' );
+
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'gcp_contact_verifications';
+
+    $record_id = isset( $_POST['gcp_record_id'] ) ? intval( $_POST['gcp_record_id'] ) : 0;
+    if ( $record_id <= 0 ) {
+        add_settings_error( 'gcp_students', 'gcp_invalid_record', __( 'No se ha podido identificar el registro a actualizar.', 'gcp-generador-cert' ), 'error' );
+        return;
+    }
+
+    $first_name    = isset( $_POST['gcp_first_name'] ) ? sanitize_text_field( wp_unslash( $_POST['gcp_first_name'] ) ) : '';
+    $last_name     = isset( $_POST['gcp_last_name'] ) ? sanitize_text_field( wp_unslash( $_POST['gcp_last_name'] ) ) : '';
+    $course_name   = isset( $_POST['gcp_course_name'] ) ? sanitize_text_field( wp_unslash( $_POST['gcp_course_name'] ) ) : '';
+    $course_stage  = isset( $_POST['gcp_etapa_del_curso'] ) ? sanitize_text_field( wp_unslash( $_POST['gcp_etapa_del_curso'] ) ) : '';
+    $company_name  = isset( $_POST['gcp_nombre_empresa'] ) ? sanitize_text_field( wp_unslash( $_POST['gcp_nombre_empresa'] ) ) : '';
+    $company_nit   = isset( $_POST['gcp_nit_empresa'] ) ? sanitize_text_field( wp_unslash( $_POST['gcp_nit_empresa'] ) ) : '';
+    $date_verified = isset( $_POST['gcp_date_verified'] ) ? sanitize_text_field( wp_unslash( $_POST['gcp_date_verified'] ) ) : '';
+
+    $data   = array(
+        'first_name'      => $first_name,
+        'last_name'       => $last_name,
+        'course_name'     => $course_name,
+        'etapa_del_curso' => $course_stage,
+        'nombre_empresa'  => $company_name,
+        'nit_empresa'     => $company_nit,
+    );
+    $format = array( '%s', '%s', '%s', '%s', '%s', '%s' );
+
+    if ( ! empty( $date_verified ) ) {
+        $timestamp = strtotime( $date_verified );
+        if ( false !== $timestamp ) {
+            $data['date_verified'] = gmdate( 'Y-m-d H:i:s', $timestamp );
+        } else {
+            $data['date_verified'] = $date_verified;
+        }
+        $format[] = '%s';
+    }
+
+    $updated = $wpdb->update( $table_name, $data, array( 'id' => $record_id ), $format, array( '%d' ) );
+
+    if ( false === $updated ) {
+        add_settings_error( 'gcp_students', 'gcp_update_failed', __( 'No se pudo actualizar el registro. Intenta de nuevo.', 'gcp-generador-cert' ), 'error' );
+    } else {
+        add_settings_error( 'gcp_students', 'gcp_update_success', __( 'Registro actualizado correctamente.', 'gcp-generador-cert' ), 'updated' );
+    }
+}
+
+/**
+ * Map the FluentCRM custom fields that should surface in the enrolled students module.
+ *
+ * @return array[] Array of grouped field definitions.
+ */
+function gcp_get_fluentcrm_custom_field_groups() {
+    static $groups = null;
+
+    if ( null !== $groups ) {
+        return $groups;
+    }
+
+    $groups = array(
+        'participant' => array(
+            'label'  => __( 'Información del Participante', 'gcp-generador-cert' ),
+            'fields' => array(
+                'tipo_de_documento'            => __( 'Tipo de Documento', 'gcp-generador-cert' ),
+                'cedula'                       => __( 'Cédula', 'gcp-generador-cert' ),
+                'cedula_escaneada'             => __( 'Cédula Escaneada', 'gcp-generador-cert' ),
+                'telefono'                     => __( 'Teléfono', 'gcp-generador-cert' ),
+                'seguridad_social'             => __( 'Seguridad Social', 'gcp-generador-cert' ),
+                'arl'                          => __( 'ARL', 'gcp-generador-cert' ),
+                'examen_medico_en_alturas'     => __( 'Examén Médico en Alturas', 'gcp-generador-cert' ),
+            ),
+        ),
+        'company'     => array(
+            'label'  => __( 'Información de la Empresa', 'gcp-generador-cert' ),
+            'fields' => array(
+                'nombre_de_la_empresa_empl'    => __( 'Nombre de la Empresa Empleadora', 'gcp-generador-cert' ),
+                'nit_de_la_empresa_emplead'    => __( 'Nit de la Empresa Empleadora', 'gcp-generador-cert' ),
+                'rut_empresa'                  => __( 'Rut Empresa', 'gcp-generador-cert' ),
+                'representante_legal_de_la'    => __( 'Nombre Representante Legal', 'gcp-generador-cert' ),
+                'nombre_de_contacto_de_la_'    => __( 'Nombre de Contacto de la Empresa', 'gcp-generador-cert' ),
+                'correo_electronico_de_la_'    => __( 'Correo Electrónico de la Empresa', 'gcp-generador-cert' ),
+                'sector_economico_de_la_em'    => __( 'Sector Económico de la Empresa', 'gcp-generador-cert' ),
+                'centro_de_costos'             => __( 'Centro de Costos', 'gcp-generador-cert' ),
+            ),
+        ),
+        'course'      => array(
+            'label'  => __( 'Datos del Curso y Certificación', 'gcp-generador-cert' ),
+            'fields' => array(
+                'nombre_del_curso'             => __( 'Nombre del Curso', 'gcp-generador-cert' ),
+                'intensidad_horaria'           => __( 'Intensidad Horaria', 'gcp-generador-cert' ),
+                'fecha_de_inicio'              => __( 'Fecha de Inicio', 'gcp-generador-cert' ),
+                'fecha_de_realizado'           => __( 'Fecha de Finalización', 'gcp-generador-cert' ),
+                'etapa_del_curso'              => __( 'Etapa del Curso', 'gcp-generador-cert' ),
+                'nci'                          => __( 'NCI', 'gcp-generador-cert' ),
+                'curso_avanzado_o_trabajad'    => __( 'Certificado Curso Avanzado/Autorizado', 'gcp-generador-cert' ),
+                'certificado_de_curso_reen'    => __( 'Certificado de Curso Reentrenamiento', 'gcp-generador-cert' ),
+                'certificado_sg-sst'           => __( 'Certificado SG-SST', 'gcp-generador-cert' ),
+                'id_ministerio_del_curso'      => __( 'Validación del Certificado Ministerio', 'gcp-generador-cert' ),
+                'fecha_de_expedicion'          => __( 'Fecha de Expedición', 'gcp-generador-cert' ),
+                'enfoque_a_necesidades'        => __( 'Enfoque a Necesidades de Formación', 'gcp-generador-cert' ),
+                'viene_por'                    => __( 'Viene por', 'gcp-generador-cert' ),
+            ),
+        ),
+        'management'  => array(
+            'label'  => __( 'Gestión y Pagos (Administrativo)', 'gcp-generador-cert' ),
+            'fields' => array(
+                'numero_factura'               => __( 'Número Factura', 'gcp-generador-cert' ),
+                'estado_de_pago_del_curso'     => __( 'Estado de Pago del Curso', 'gcp-generador-cert' ),
+                'fecha_de_pago'                => __( 'Fecha de Pago', 'gcp-generador-cert' ),
+                '_estado_de_la_documentaci'    => __( 'Estado de la Documentación', 'gcp-generador-cert' ),
+                'encargado_de_verificacion'    => __( 'Encargado de Verificación', 'gcp-generador-cert' ),
+                'novedad'                      => __( 'Novedad', 'gcp-generador-cert' ),
+            ),
+        ),
+    );
+
+    return $groups;
+}
+
+/**
+ * Flatten the FluentCRM custom field groups into a single slug => label map.
+ *
+ * @return array<string, string>
+ */
+function gcp_get_all_fluentcrm_custom_field_labels() {
+    $groups = gcp_get_fluentcrm_custom_field_groups();
+    $labels = array();
+
+    foreach ( $groups as $group ) {
+        if ( empty( $group['fields'] ) || ! is_array( $group['fields'] ) ) {
+            continue;
+        }
+
+        foreach ( $group['fields'] as $slug => $label ) {
+            $labels[ sanitize_key( $slug ) ] = $label;
+        }
+    }
+
+    return $labels;
+}
+
+/**
+ * Convert FluentCRM custom field values into strings ready for display/export.
+ *
+ * @param mixed $value Raw value from the database or API.
+ * @return string
+ */
+function gcp_format_fluentcrm_custom_field_value( $value ) {
+    if ( is_array( $value ) ) {
+        $value = array_filter( array_map( 'trim', $value ), 'strlen' );
+        $value = implode( ', ', $value );
+    } elseif ( is_object( $value ) ) {
+        $value = wp_json_encode( $value );
+    }
+
+    if ( null === $value ) {
+        $value = '';
+    }
+
+    return is_string( $value ) ? $value : (string) $value;
+}
+
+/**
+ * Retrieve the FluentCRM custom field values for a list of contact IDs.
+ *
+ * @param int[] $contact_ids Contact IDs stored in the verification table.
+ * @param string[] $target_slugs Slugs we are interested in.
+ * @return array<int, array<string, string>>
+ */
+function gcp_get_fluentcrm_custom_values_for_contacts( $contact_ids, $target_slugs ) {
+    $results = array();
+
+    if ( empty( $contact_ids ) || empty( $target_slugs ) ) {
+        return $results;
+    }
+
+    global $wpdb;
+    $contact_ids   = array_values( array_unique( array_filter( array_map( 'intval', $contact_ids ) ) ) );
+    $target_slugs  = array_values( array_unique( array_filter( array_map( 'sanitize_key', $target_slugs ) ) ) );
+
+    if ( empty( $contact_ids ) || empty( $target_slugs ) ) {
+        return $results;
+    }
+
+    $meta_table         = $wpdb->prefix . 'fc_subscriber_meta';
+    $ids_placeholders   = implode( ', ', array_fill( 0, count( $contact_ids ), '%d' ) );
+    $keys_placeholders  = implode( ', ', array_fill( 0, count( $target_slugs ), '%s' ) );
+    $sql                = "SELECT subscriber_id, `key`, `value` FROM {$meta_table} WHERE subscriber_id IN ({$ids_placeholders}) AND `key` IN ({$keys_placeholders})";
+    $prepared           = $wpdb->prepare( $sql, array_merge( $contact_ids, $target_slugs ) );
+    $meta_rows          = $wpdb->get_results( $prepared );
+
+    if ( empty( $meta_rows ) ) {
+        return $results;
+    }
+
+    foreach ( $meta_rows as $row ) {
+        $subscriber_id = isset( $row->subscriber_id ) ? intval( $row->subscriber_id ) : 0;
+        $slug          = isset( $row->key ) ? sanitize_key( $row->key ) : '';
+
+        if ( ! $subscriber_id || ! $slug ) {
+            continue;
+        }
+
+        $raw_value = maybe_unserialize( $row->value );
+        $results[ $subscriber_id ][ $slug ] = gcp_format_fluentcrm_custom_field_value( $raw_value );
+    }
+
+    return $results;
+}
+
+/**
+ * Attach FluentCRM custom field values to each verification record.
+ *
+ * @param array $records Verification records loaded from the database.
+ * @param array $custom_field_labels Flattened slug => label map.
+ * @return array
+ */
+function gcp_attach_custom_fields_to_student_records( $records, $custom_field_labels ) {
+    if ( empty( $records ) ) {
+        return $records;
+    }
+
+    $custom_field_labels = is_array( $custom_field_labels ) ? $custom_field_labels : array();
+
+    if ( empty( $custom_field_labels ) ) {
+        foreach ( $records as $record ) {
+            $record->custom_fields = array();
+        }
+        return $records;
+    }
+
+    $contact_ids = array();
+    foreach ( $records as $record ) {
+        if ( ! empty( $record->fluentcrm_contact_id ) ) {
+            $contact_ids[] = intval( $record->fluentcrm_contact_id );
+        }
+    }
+
+    $contact_meta_values = gcp_get_fluentcrm_custom_values_for_contacts( $contact_ids, array_keys( $custom_field_labels ) );
+    $cedula_cache        = array();
+
+    foreach ( $records as $record ) {
+        $record->custom_fields = array();
+        $record_meta_values    = array();
+
+        if ( ! empty( $record->fluentcrm_contact_id ) && isset( $contact_meta_values[ $record->fluentcrm_contact_id ] ) ) {
+            $record_meta_values = $contact_meta_values[ $record->fluentcrm_contact_id ];
+        } elseif ( ! empty( $record->cedula_alumno ) ) {
+            $cedula_key = sanitize_text_field( $record->cedula_alumno );
+            if ( ! isset( $cedula_cache[ $cedula_key ] ) ) {
+                $cedula_cache[ $cedula_key ] = gcp_get_contact_data_by_cedula( $cedula_key );
+            }
+
+            $contact_details = $cedula_cache[ $cedula_key ];
+            if ( ! is_wp_error( $contact_details ) && ! empty( $contact_details['custom_fields'] ) ) {
+                foreach ( $contact_details['custom_fields'] as $slug => $info ) {
+                    $value = is_array( $info ) && isset( $info['value'] ) ? $info['value'] : $info;
+                    $record_meta_values[ sanitize_key( $slug ) ] = gcp_format_fluentcrm_custom_field_value( $value );
+                }
+            }
+        }
+
+        foreach ( $custom_field_labels as $slug => $label ) {
+            $record->custom_fields[ $slug ] = isset( $record_meta_values[ $slug ] ) ? $record_meta_values[ $slug ] : '';
+        }
+    }
+
+    return $records;
+}
+
+add_action( 'admin_init', 'gcp_handle_export_estudiantes' );
+
+/**
+ * Allow exporting the students table as CSV.
+ */
+function gcp_handle_export_estudiantes() {
+    if ( empty( $_GET['page'] ) || 'gcp_estudiantes_inscritos' !== $_GET['page'] ) {
+        return;
+    }
+
+    if ( empty( $_GET['gcp_export'] ) || 'csv' !== $_GET['gcp_export'] ) {
+        return;
+    }
+
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+
+    $nonce = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
+    if ( ! wp_verify_nonce( $nonce, 'gcp_export_students' ) ) {
+        wp_die( __( 'Error de seguridad: Nonce inválido.', 'gcp-generador-cert' ) );
+    }
+
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'gcp_contact_verifications';
+
+    $search_cedula = isset( $_GET['s_cedula'] ) ? sanitize_text_field( wp_unslash( $_GET['s_cedula'] ) ) : '';
+    $search_nit    = isset( $_GET['s_nit'] ) ? sanitize_text_field( wp_unslash( $_GET['s_nit'] ) ) : '';
+
+    $sql    = "SELECT id, cedula_alumno, fluentcrm_contact_id, first_name, last_name, email, course_name, etapa_del_curso, nit_empresa, nombre_empresa, date_verified FROM {$table_name}";
+    $where  = array();
+    $params = array();
+
+    if ( ! empty( $search_cedula ) ) {
+        $where[]  = 'cedula_alumno = %s';
+        $params[] = $search_cedula;
+    }
+
+    if ( ! empty( $search_nit ) ) {
+        $where[]  = 'nit_empresa = %s';
+        $params[] = $search_nit;
+    }
+
+    if ( ! empty( $where ) ) {
+        $sql .= ' WHERE ' . implode( ' AND ', $where );
+    }
+
+    $sql .= ' ORDER BY date_verified DESC';
+
+    if ( ! empty( $params ) ) {
+        $registros = $wpdb->get_results( $wpdb->prepare( $sql, $params ) );
+    } else {
+        $registros = $wpdb->get_results( $sql );
+    }
+
+    $custom_field_labels  = gcp_get_all_fluentcrm_custom_field_labels();
+    $registros            = gcp_attach_custom_fields_to_student_records( $registros, $custom_field_labels );
+
+    $filename = 'estudiantes-inscritos-' . gmdate( 'Ymd-His' ) . '.csv';
+
+    header( 'Content-Type: text/csv; charset=utf-8' );
+    header( 'Content-Disposition: attachment; filename=' . $filename );
+
+    $output = fopen( 'php://output', 'w' );
+
+    $csv_headers = array( 'ID', 'Cedula', 'Nombre', 'Apellido', 'Email', 'Curso', 'Etapa', 'Nombre Empresa', 'NIT Empresa', 'Fecha Inscripcion' );
+
+    if ( ! empty( $custom_field_labels ) ) {
+        foreach ( $custom_field_labels as $label ) {
+            $csv_headers[] = $label;
+        }
+    }
+
+    fputcsv( $output, $csv_headers );
+
+    if ( ! empty( $registros ) ) {
+        foreach ( $registros as $reg ) {
+            $date = ! empty( $reg->date_verified ) ? mysql2date( 'Y-m-d H:i:s', $reg->date_verified ) : '';
+            $row = array(
+                $reg->id,
+                $reg->cedula_alumno,
+                $reg->first_name,
+                $reg->last_name,
+                $reg->email,
+                $reg->course_name,
+                $reg->etapa_del_curso,
+                $reg->nombre_empresa,
+                $reg->nit_empresa,
+                $date,
+            );
+
+            if ( ! empty( $custom_field_labels ) ) {
+                foreach ( $custom_field_labels as $slug => $label ) {
+                    $row[] = isset( $reg->custom_fields[ $slug ] ) ? $reg->custom_fields[ $slug ] : '';
+                }
+            }
+
+            fputcsv( $output, $row );
+        }
+    }
+
+    fclose( $output );
+    exit;
+}
+
 /**
  * Renderiza la página que muestra el historial de verificaciones de estudiantes.
  */
@@ -1469,7 +1863,7 @@ function gcp_render_estudiantes_inscritos_page() {
     $search_cedula = isset( $_GET['s_cedula'] ) ? sanitize_text_field( trim( $_GET['s_cedula'] ) ) : '';
     $search_nit    = isset( $_GET['s_nit'] ) ? sanitize_text_field( trim( $_GET['s_nit'] ) ) : '';
 
-    $sql    = "SELECT cedula_alumno, first_name, last_name, course_name, etapa_del_curso, nit_empresa, nombre_empresa, date_verified FROM {$table_name}";
+    $sql    = "SELECT id, cedula_alumno, fluentcrm_contact_id, first_name, last_name, email, course_name, etapa_del_curso, nit_empresa, nombre_empresa, date_verified FROM {$table_name}";
     $where  = array();
     $params = array();
 
@@ -1492,9 +1886,46 @@ function gcp_render_estudiantes_inscritos_page() {
     } else {
         $registros = $wpdb->get_results( $sql );
     }
+
+    $custom_field_groups  = gcp_get_fluentcrm_custom_field_groups();
+    $custom_field_labels  = gcp_get_all_fluentcrm_custom_field_labels();
+    $registros            = gcp_attach_custom_fields_to_student_records( $registros, $custom_field_labels );
+
+    $current_edit_id = isset( $_GET['edit_id'] ) ? intval( $_GET['edit_id'] ) : 0;
+    if ( ! $current_edit_id && ! empty( $_POST['gcp_record_id'] ) ) {
+        $current_edit_id = intval( $_POST['gcp_record_id'] );
+    }
+
+    $base_query_args = array(
+        'page' => 'gcp_estudiantes_inscritos',
+    );
+
+    if ( ! empty( $search_cedula ) ) {
+        $base_query_args['s_cedula'] = $search_cedula;
+    }
+    if ( ! empty( $search_nit ) ) {
+        $base_query_args['s_nit'] = $search_nit;
+    }
+
+    $export_url = add_query_arg(
+        array(
+            'page'       => 'gcp_estudiantes_inscritos',
+            's_cedula'   => $search_cedula,
+            's_nit'      => $search_nit,
+            'gcp_export' => 'csv',
+            '_wpnonce'   => wp_create_nonce( 'gcp_export_students' ),
+        ),
+        admin_url( 'admin.php' )
+    );
     ?>
     <div class="wrap">
         <h1><?php _e( 'Estudiantes Inscritos', 'gcp-generador-cert' ); ?></h1>
+
+        <div class="notice notice-warning inline">
+            <p><strong><?php _e( 'Advertencia:', 'gcp-generador-cert' ); ?></strong> <?php _e( 'Los cambios que realices aquí modificarán la base de datos. Asegúrate de verificar los datos antes de guardar.', 'gcp-generador-cert' ); ?></p>
+        </div>
+
+        <?php settings_errors( 'gcp_students' ); ?>
 
         <form method="get" style="margin-bottom:20px;">
             <input type="hidden" name="page" value="gcp_estudiantes_inscritos">
@@ -1507,8 +1938,13 @@ function gcp_render_estudiantes_inscritos_page() {
 
                 <input type="submit" id="search-submit" class="button" value="<?php _e( 'Buscar', 'gcp-generador-cert' ); ?>">
                 <?php if ( ! empty( $search_cedula ) || ! empty( $search_nit ) ) : ?>
-                    <a href="<?php echo esc_url( admin_url( 'admin.php?page=gcp_estudiantes_inscritos' ) ); ?>" class="button" style="margin-left:5px;"><?php _e( 'Mostrar Todos', 'gcp-generador-cert' ); ?></a>
+                    <a href="<?php echo esc_url( admin_url( 'admin.php?page=gcp_estudiantes_inscritos' ) ); ?>" class="button" style="margin-left:5px;">
+                        <?php _e( 'Mostrar Todos', 'gcp-generador-cert' ); ?>
+                    </a>
                 <?php endif; ?>
+                <a href="<?php echo esc_url( $export_url ); ?>" class="button button-primary" style="margin-left:5px;">
+                    <?php _e( 'Exportar CSV', 'gcp-generador-cert' ); ?>
+                </a>
             </p>
         </form>
 
@@ -1522,11 +1958,22 @@ function gcp_render_estudiantes_inscritos_page() {
                     <th><?php _e( 'Nombre Empresa', 'gcp-generador-cert' ); ?></th>
                     <th><?php _e( 'NIT Empresa', 'gcp-generador-cert' ); ?></th>
                     <th><?php _e( 'Fecha de inscripción', 'gcp-generador-cert' ); ?></th>
+                    <th><?php _e( 'Acciones', 'gcp-generador-cert' ); ?></th>
                 </tr>
             </thead>
             <tbody>
                 <?php if ( ! empty( $registros ) ) : ?>
                     <?php foreach ( $registros as $reg ) : ?>
+                        <?php
+                        $is_open          = ( intval( $reg->id ) === $current_edit_id );
+                        $edit_query_args  = $base_query_args;
+                        $edit_query_args['edit_id'] = $reg->id;
+                        $edit_url         = add_query_arg( $edit_query_args, admin_url( 'admin.php' ) );
+                        $cancel_url       = add_query_arg( $base_query_args, admin_url( 'admin.php' ) );
+                        $aria_expanded    = $is_open ? 'true' : 'false';
+                        $edit_row_classes = 'gcp-student-edit-row' . ( $is_open ? ' is-open' : '' );
+                        $edit_row_attrs   = $is_open ? ' aria-hidden="false"' : ' aria-hidden="true" hidden';
+                        ?>
                         <tr>
                             <td><?php echo esc_html( $reg->cedula_alumno ); ?></td>
                             <td><?php echo esc_html( trim( $reg->first_name . ' ' . $reg->last_name ) ); ?></td>
@@ -1534,11 +1981,126 @@ function gcp_render_estudiantes_inscritos_page() {
                             <td><?php echo esc_html( $reg->etapa_del_curso ); ?></td>
                             <td><?php echo esc_html( $reg->nombre_empresa ); ?></td>
                             <td><?php echo esc_html( $reg->nit_empresa ); ?></td>
-                            <td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $reg->date_verified ) ) ); ?></td>
+                            <?php
+                            $date_display = '';
+                            if ( ! empty( $reg->date_verified ) ) {
+                                $timestamp = strtotime( $reg->date_verified );
+                                if ( false !== $timestamp ) {
+                                    $date_display = date_i18n( get_option( 'date_format' ), $timestamp );
+                                }
+                            }
+                            ?>
+                            <td><?php echo esc_html( $date_display ); ?></td>
+                            <td>
+                                <a
+                                    class="button gcp-toggle-edit"
+                                    href="<?php echo esc_url( $edit_url ); ?>"
+                                    data-target="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>"
+                                    aria-expanded="<?php echo esc_attr( $aria_expanded ); ?>"
+                                    aria-controls="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>"
+                                >
+                                    <?php _e( 'Editar', 'gcp-generador-cert' ); ?>
+                                </a>
+                            </td>
+                        </tr>
+                        <tr id="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>" class="<?php echo esc_attr( $edit_row_classes ); ?>"<?php echo $edit_row_attrs; ?>>
+                            <td colspan="8">
+                                <form method="post" class="gcp-student-edit-form">
+                                    <?php wp_nonce_field( 'gcp_edit_verification', 'gcp_edit_verification_nonce' ); ?>
+                                    <input type="hidden" name="page" value="gcp_estudiantes_inscritos">
+                                    <input type="hidden" name="gcp_record_id" value="<?php echo esc_attr( $reg->id ); ?>">
+
+                                    <p class="description">
+                                        <?php _e( 'Confirma que los datos son correctos antes de guardar; esta acción no se puede deshacer fácilmente.', 'gcp-generador-cert' ); ?>
+                                    </p>
+
+                                    <div class="gcp-edit-grid">
+                                        <div>
+                                            <label for="gcp-first-name-<?php echo esc_attr( $reg->id ); ?>"><?php _e( 'Nombre', 'gcp-generador-cert' ); ?></label>
+                                            <input type="text" id="gcp-first-name-<?php echo esc_attr( $reg->id ); ?>" name="gcp_first_name" value="<?php echo esc_attr( $reg->first_name ); ?>" class="regular-text">
+                                        </div>
+                                        <div>
+                                            <label for="gcp-last-name-<?php echo esc_attr( $reg->id ); ?>"><?php _e( 'Apellido', 'gcp-generador-cert' ); ?></label>
+                                            <input type="text" id="gcp-last-name-<?php echo esc_attr( $reg->id ); ?>" name="gcp_last_name" value="<?php echo esc_attr( $reg->last_name ); ?>" class="regular-text">
+                                        </div>
+                                        <div>
+                                            <label for="gcp-course-name-<?php echo esc_attr( $reg->id ); ?>"><?php _e( 'Curso', 'gcp-generador-cert' ); ?></label>
+                                            <input type="text" id="gcp-course-name-<?php echo esc_attr( $reg->id ); ?>" name="gcp_course_name" value="<?php echo esc_attr( $reg->course_name ); ?>" class="regular-text">
+                                        </div>
+                                        <div>
+                                            <label for="gcp-course-stage-<?php echo esc_attr( $reg->id ); ?>"><?php _e( 'Etapa del curso', 'gcp-generador-cert' ); ?></label>
+                                            <input type="text" id="gcp-course-stage-<?php echo esc_attr( $reg->id ); ?>" name="gcp_etapa_del_curso" value="<?php echo esc_attr( $reg->etapa_del_curso ); ?>" class="regular-text">
+                                        </div>
+                                        <div>
+                                            <label for="gcp-company-name-<?php echo esc_attr( $reg->id ); ?>"><?php _e( 'Nombre Empresa', 'gcp-generador-cert' ); ?></label>
+                                            <input type="text" id="gcp-company-name-<?php echo esc_attr( $reg->id ); ?>" name="gcp_nombre_empresa" value="<?php echo esc_attr( $reg->nombre_empresa ); ?>" class="regular-text">
+                                        </div>
+                                        <div>
+                                            <label for="gcp-company-nit-<?php echo esc_attr( $reg->id ); ?>"><?php _e( 'NIT Empresa', 'gcp-generador-cert' ); ?></label>
+                                            <input type="text" id="gcp-company-nit-<?php echo esc_attr( $reg->id ); ?>" name="gcp_nit_empresa" value="<?php echo esc_attr( $reg->nit_empresa ); ?>" class="regular-text">
+                                        </div>
+                                        <div>
+                                            <label for="gcp-date-verified-<?php echo esc_attr( $reg->id ); ?>"><?php _e( 'Fecha de inscripción', 'gcp-generador-cert' ); ?></label>
+                                            <input type="text" id="gcp-date-verified-<?php echo esc_attr( $reg->id ); ?>" name="gcp_date_verified" value="<?php echo esc_attr( $reg->date_verified ); ?>" class="regular-text">
+                                        </div>
+                                    </div>
+
+                                    <?php if ( ! empty( $custom_field_groups ) ) : ?>
+                                        <div class="gcp-student-custom-data" aria-live="polite">
+                                            <?php foreach ( $custom_field_groups as $group_key => $group_config ) : ?>
+                                                <?php
+                                                if ( empty( $group_config['fields'] ) || ! is_array( $group_config['fields'] ) ) {
+                                                    continue;
+                                                }
+                                                ?>
+                                                <section class="gcp-student-custom-group">
+                                                    <h3><?php echo esc_html( $group_config['label'] ); ?></h3>
+                                                    <div class="gcp-student-custom-grid">
+                                                        <?php foreach ( $group_config['fields'] as $slug => $label ) : ?>
+                                                            <?php
+                                                            $field_slug   = sanitize_key( $slug );
+                                                            $raw_value    = isset( $reg->custom_fields[ $field_slug ] ) ? $reg->custom_fields[ $field_slug ] : '';
+                                                            $display_text = is_string( $raw_value ) ? trim( $raw_value ) : '';
+                                                            $is_link      = $display_text && filter_var( $display_text, FILTER_VALIDATE_URL );
+                                                            ?>
+                                                            <div class="gcp-student-custom-item">
+                                                                <span class="gcp-student-custom-label"><?php echo esc_html( $label ); ?></span>
+                                                                <span class="gcp-student-custom-value">
+                                                                    <?php if ( $is_link ) : ?>
+                                                                        <a href="<?php echo esc_url( $display_text ); ?>" target="_blank" rel="noopener noreferrer">
+                                                                            <?php esc_html_e( 'Abrir enlace', 'gcp-generador-cert' ); ?>
+                                                                        </a>
+                                                                    <?php else : ?>
+                                                                        <?php echo $display_text !== '' ? esc_html( $display_text ) : '&mdash;'; ?>
+                                                                    <?php endif; ?>
+                                                                </span>
+                                                            </div>
+                                                        <?php endforeach; ?>
+                                                    </div>
+                                                </section>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php endif; ?>
+
+                                    <p class="gcp-edit-actions">
+                                        <button type="submit" class="button button-primary">
+                                            <?php _e( 'Guardar cambios', 'gcp-generador-cert' ); ?>
+                                        </button>
+                                        <a
+                                            href="<?php echo esc_url( $cancel_url ); ?>"
+                                            class="button gcp-cancel-edit"
+                                            data-target="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>"
+                                            aria-controls="gcp-edit-row-<?php echo esc_attr( $reg->id ); ?>"
+                                        >
+                                            <?php _e( 'Cancelar', 'gcp-generador-cert' ); ?>
+                                        </a>
+                                    </p>
+                                </form>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                 <?php else : ?>
-                    <tr><td colspan="7"><?php _e( 'No hay registros.', 'gcp-generador-cert' ); ?></td></tr>
+                    <tr><td colspan="8"><?php _e( 'No hay registros.', 'gcp-generador-cert' ); ?></td></tr>
                 <?php endif; ?>
             </tbody>
         </table>
