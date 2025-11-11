@@ -18,3 +18,75 @@
   border: 1px solid #ccc;
   padding: 20px;
 }
+
+.gcp-student-edit-row {
+  display: none;
+  background-color: #fffdf5;
+}
+
+.gcp-student-edit-row.is-open {
+  display: table-row;
+}
+
+.gcp-student-edit-form {
+  border: 1px solid #f0b849;
+  padding: 15px;
+  background-color: #fff9ec;
+}
+
+.gcp-student-edit-form .gcp-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 15px;
+  margin: 15px 0;
+}
+
+.gcp-student-edit-form label {
+  font-weight: 600;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.gcp-student-custom-data {
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid #f0b849;
+  display: grid;
+  gap: 20px;
+}
+
+.gcp-student-custom-group h3 {
+  margin: 0 0 12px;
+  font-size: 1.05em;
+}
+
+.gcp-student-custom-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.gcp-student-custom-item {
+  background: #fff;
+  border: 1px solid #f5d58a;
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+
+.gcp-student-custom-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.gcp-student-custom-value {
+  display: block;
+  word-break: break-word;
+}
+
+.gcp-edit-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
