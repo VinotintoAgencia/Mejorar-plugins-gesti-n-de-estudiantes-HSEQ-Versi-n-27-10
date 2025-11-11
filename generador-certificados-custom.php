@@ -2115,12 +2115,6 @@ function gcp_sync_fluentform_submission_to_fluentcrm( $entry_id, $form_data, $fo
     $email_value = gcp_extract_submission_email( $form_data );
     $subscriber  = gcp_find_fluentcrm_contact_for_sync( $cedula_value, $email_value );
 
-    if ( ! $subscriber ) {
-        return;
-    }
-
-    gcp_update_fluentcrm_custom_values( intval( $subscriber->id ), $updates );
-
     $profile_updates = array();
 
     $first_name = gcp_extract_submission_value_for_slug( $form_data, 'first_name', __( 'Nombre', 'gcp-generador-cert' ) );
@@ -2143,9 +2137,44 @@ function gcp_sync_fluentform_submission_to_fluentcrm( $entry_id, $form_data, $fo
         $profile_updates['phone'] = $updates['telefono'];
     }
 
-    if ( $email_value && is_email( $email_value ) && $email_value !== $subscriber->email ) {
+    if ( $subscriber && $email_value && is_email( $email_value ) && $email_value !== $subscriber->email ) {
         $profile_updates['email'] = sanitize_email( $email_value );
     }
+
+    if ( ! $subscriber && $email_value ) {
+        $creation_payload = array(
+            'email'  => $email_value,
+            'status' => 'subscribed',
+        );
+
+        if ( isset( $profile_updates['first_name'] ) ) {
+            $creation_payload['first_name'] = $profile_updates['first_name'];
+        }
+
+        if ( isset( $profile_updates['last_name'] ) ) {
+            $creation_payload['last_name'] = $profile_updates['last_name'];
+        }
+
+        if ( isset( $profile_updates['phone'] ) ) {
+            $creation_payload['phone'] = $profile_updates['phone'];
+        }
+
+        try {
+            $subscriber = Subscriber::updateOrCreate(
+                array( 'email' => $email_value ),
+                $creation_payload
+            );
+        } catch ( Exception $e ) {
+            error_log( 'GCP Plugin - Error al crear/actualizar el contacto de FluentCRM: ' . $e->getMessage() );
+            $subscriber = null;
+        }
+    }
+
+    if ( ! $subscriber ) {
+        return;
+    }
+
+    gcp_update_fluentcrm_custom_values( intval( $subscriber->id ), $updates );
 
     if ( ! empty( $profile_updates ) ) {
         try {
