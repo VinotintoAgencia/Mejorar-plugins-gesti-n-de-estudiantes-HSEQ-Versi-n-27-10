@@ -1762,6 +1762,12 @@ function gcp_normalize_form_submission_value( $value ) {
             $value = $value['url'];
         } elseif ( isset( $value['path'] ) && is_scalar( $value['path'] ) ) {
             $value = $value['path'];
+        } elseif ( isset( $value['file_url'] ) && is_scalar( $value['file_url'] ) ) {
+            $value = $value['file_url'];
+        } elseif ( isset( $value['file'] ) && is_scalar( $value['file'] ) ) {
+            $value = $value['file'];
+        } elseif ( isset( $value['files'] ) && is_array( $value['files'] ) ) {
+            $value = $value['files'];
         } else {
             $flat_values = array();
 
@@ -1772,6 +1778,14 @@ function gcp_normalize_form_submission_value( $value ) {
                     $flat_values[] = (string) $nested['value'];
                 } elseif ( is_array( $nested ) && isset( $nested['label'] ) && is_scalar( $nested['label'] ) ) {
                     $flat_values[] = (string) $nested['label'];
+                } elseif ( is_array( $nested ) && isset( $nested['url'] ) && is_scalar( $nested['url'] ) ) {
+                    $flat_values[] = (string) $nested['url'];
+                } elseif ( is_array( $nested ) && isset( $nested['path'] ) && is_scalar( $nested['path'] ) ) {
+                    $flat_values[] = (string) $nested['path'];
+                } elseif ( is_array( $nested ) && isset( $nested['file_url'] ) && is_scalar( $nested['file_url'] ) ) {
+                    $flat_values[] = (string) $nested['file_url'];
+                } elseif ( is_array( $nested ) && isset( $nested['file'] ) && is_scalar( $nested['file'] ) ) {
+                    $flat_values[] = (string) $nested['file'];
                 } elseif ( is_object( $nested ) ) {
                     $flat_values[] = wp_json_encode( $nested );
                 }
@@ -1876,8 +1890,24 @@ function gcp_extract_submission_value_for_slug( $form_data, $slug, $label = '' )
     }
 
     $candidate_keys = gcp_possible_submission_keys_for_slug( $slug, $label );
+
+    return gcp_find_submission_value_for_keys( $form_data, $candidate_keys );
+}
+
+/**
+ * Recursively search a Fluent Forms submission payload for any of the provided keys.
+ *
+ * @param array    $form_data       Submission data array.
+ * @param string[] $candidate_keys  List of potential keys/aliases.
+ * @return string|null Normalized value or null if not present.
+ */
+function gcp_find_submission_value_for_keys( $form_data, $candidate_keys ) {
+    if ( empty( $form_data ) || empty( $candidate_keys ) ) {
+        return null;
+    }
+
     foreach ( $candidate_keys as $key ) {
-        if ( isset( $form_data[ $key ] ) ) {
+        if ( is_array( $form_data ) && array_key_exists( $key, $form_data ) ) {
             $normalized = gcp_normalize_form_submission_value( $form_data[ $key ] );
             if ( '' !== $normalized ) {
                 return $normalized;
@@ -1885,11 +1915,35 @@ function gcp_extract_submission_value_for_slug( $form_data, $slug, $label = '' )
         }
     }
 
-    foreach ( $form_data as $key => $value ) {
-        if ( sanitize_key( $key ) === sanitize_key( $slug ) ) {
-            $normalized = gcp_normalize_form_submission_value( $value );
-            if ( '' !== $normalized ) {
-                return $normalized;
+    $sanitized_candidates = array();
+    foreach ( $candidate_keys as $key ) {
+        $sanitized = sanitize_key( $key );
+        if ( $sanitized ) {
+            $sanitized_candidates[ $sanitized ] = true;
+        }
+    }
+
+    if ( $sanitized_candidates ) {
+        foreach ( $form_data as $data_key => $value ) {
+            if ( is_string( $data_key ) && isset( $sanitized_candidates[ sanitize_key( $data_key ) ] ) ) {
+                $normalized = gcp_normalize_form_submission_value( $value );
+                if ( '' !== $normalized ) {
+                    return $normalized;
+                }
+            }
+        }
+    }
+
+    foreach ( $form_data as $value ) {
+        if ( is_array( $value ) ) {
+            $nested = gcp_find_submission_value_for_keys( $value, $candidate_keys );
+            if ( null !== $nested ) {
+                return $nested;
+            }
+        } elseif ( is_object( $value ) ) {
+            $nested = gcp_find_submission_value_for_keys( (array) $value, $candidate_keys );
+            if ( null !== $nested ) {
+                return $nested;
             }
         }
     }
