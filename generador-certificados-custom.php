@@ -72,6 +72,101 @@ function gcp_maybe_update_db_schema() {
 }
 
 /**
+ * When a Fluent Form submission is inserted, sync the "cedula" custom field
+ * with the matching FluentCRM subscriber so the CRM always has the latest value.
+ *
+ * @param int   $entry_id  Fluent Form entry ID.
+ * @param array $form_data Submitted form data.
+ * @param array $form      Form definition.
+ */
+add_action( 'fluentform/submission_inserted', 'gcp_sync_cedula_with_fluentcrm', 10, 3 );
+function gcp_sync_cedula_with_fluentcrm( $entry_id, $form_data, $form ) {
+    if ( empty( $form_data ) || ! is_array( $form_data ) ) {
+        return;
+    }
+
+    if ( ! function_exists( 'fluentCrmDb' ) || ! class_exists( '\\FluentCrm\\App\\Models\\Subscriber' ) ) {
+        return;
+    }
+
+    $email = '';
+    $cedula = '';
+
+    // Attempt to detect standard keys first.
+    $known_email_keys  = array( 'email', 'correo', 'correo_electronico' );
+    $known_cedula_keys = array( 'cedula', 'cédula', 'numero_de_cedula', 'numero_de_cédula', 'numero_documento', 'documento' );
+
+    foreach ( $known_email_keys as $key ) {
+        if ( ! empty( $form_data[ $key ] ) ) {
+            $email = sanitize_email( $form_data[ $key ] );
+            if ( $email ) {
+                break;
+            }
+        }
+    }
+
+    foreach ( $known_cedula_keys as $key ) {
+        if ( ! empty( $form_data[ $key ] ) ) {
+            $cedula = sanitize_text_field( $form_data[ $key ] );
+            if ( $cedula ) {
+                break;
+            }
+        }
+    }
+
+    // Fallback: inspect every key searching for patterns.
+    if ( ! $email ) {
+        foreach ( $form_data as $key => $value ) {
+            if ( ! is_scalar( $value ) ) {
+                continue;
+            }
+            if ( false !== stripos( $key, 'email' ) ) {
+                $email = sanitize_email( $value );
+                if ( $email ) {
+                    break;
+                }
+            }
+        }
+    }
+
+    if ( ! $cedula ) {
+        foreach ( $form_data as $key => $value ) {
+            if ( ! is_scalar( $value ) ) {
+                continue;
+            }
+            if ( false !== stripos( $key, 'cedula' ) || false !== stripos( $key, 'cédula' ) ) {
+                $cedula = sanitize_text_field( $value );
+                if ( $cedula ) {
+                    break;
+                }
+            }
+        }
+    }
+
+    if ( empty( $email ) || empty( $cedula ) ) {
+        return;
+    }
+
+    try {
+        $subscriber = Subscriber::where( 'email', $email )->first();
+        if ( ! $subscriber ) {
+            return;
+        }
+
+        $current_cedula = $subscriber->getMeta( 'cedula' );
+        if ( $current_cedula === $cedula ) {
+            return;
+        }
+
+        $subscriber->attachMeta( array( 'cedula' => $cedula ) );
+    } catch ( \Exception $e ) {
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            error_log( 'GCP Plugin - Error sincronizando cédula desde Fluent Forms: ' . $e->getMessage() );
+        }
+    }
+}
+
+/**
  * Add etapa_del_curso column to contact verifications table if missing.
  */
 function gcp_maybe_add_etapa_column() {
