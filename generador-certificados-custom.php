@@ -609,8 +609,12 @@ function gcp_enqueue_admin_scripts( $hook_suffix ) {
         'gcp-admin-main-script',
         'gcp_ajax_obj', // Este nonce se usa para el PDF, el de búsqueda está en el form
         array(
-            'ajaxurl' => admin_url( 'admin-ajax.php' ),
-            'nonce'   => wp_create_nonce( 'gcp_pdf_generation_nonce' )
+            'ajaxurl'                   => admin_url( 'admin-ajax.php' ),
+            'nonce'                     => wp_create_nonce( 'gcp_pdf_generation_nonce' ),
+            'verificationSuccess'       => __( 'Verificación Exitosa', 'gcp-generador-cert' ),
+            'verificationError'         => __( 'Error al registrar.', 'gcp-generador-cert' ),
+            'verificationCommError'     => __( 'Error de comunicación al registrar.', 'gcp-generador-cert' ),
+            'verificationMissingCedula' => __( 'Por favor, ingresa una cédula.', 'gcp-generador-cert' )
         )
     );
     // Estilos del formulario en la página de administración
@@ -1549,6 +1553,7 @@ function gcp_render_verificacion_admision_page() {
             <p class="submit">
                 <button type="button" id="gcp-register-verification-button" class="button button-primary"><?php _e( 'Verificación de Admisión', 'gcp-generador-cert' ); ?></button>
             </p>
+            <div id="gcp-verification-notice" style="margin-top: 15px;"></div>
         </form>
     </div>
     <?php

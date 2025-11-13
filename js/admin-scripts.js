@@ -10,6 +10,8 @@ jQuery(function($) {
   const $preview      = $('#gcp-certificate-preview');
   const $previewSpans = $preview.find('span');
   const $pdfContainer = $('#gcp-pdf-link-container');
+  const $verificationNotice = $('#gcp-verification-notice');
+  const ajaxStrings = typeof gcp_ajax_obj === 'undefined' ? {} : gcp_ajax_obj;
   const SPINNER_CLASS = 'gcp-spinner';
   const SLUGS = [
     'nombre_del_curso', 'nombre_de_la_empresa_empl', 'nit_de_la_empresa_emplead',
@@ -47,6 +49,32 @@ jQuery(function($) {
   // Elimina todos los spinners generados
   function removeSpinners() {
     $(`.${SPINNER_CLASS}`).remove();
+  }
+
+  function clearNotice($target) {
+    if ($target && $target.length) {
+      $target.empty();
+    }
+  }
+
+  function showNotice($target, messages, isSuccess = true) {
+    if (!messages || !messages.length) {
+      return;
+    }
+
+    if (!$target || !$target.length) {
+      alert(messages.join('\n'));
+      return;
+    }
+
+    const $notice = $('<div>')
+      .addClass(`notice ${isSuccess ? 'notice-success' : 'notice-error'} is-dismissible`);
+
+    messages.forEach(msg => {
+      $notice.append($('<p>').text(msg));
+    });
+
+    $target.empty().append($notice);
   }
 
   // Obtiene con seguridad un campo personalizado
@@ -152,16 +180,23 @@ jQuery(function($) {
 
   // 3) Registrar verificación
   $('#gcp-register-verification-button').on('click', function() {
+    const $noticeTarget = $verificationNotice.length ? $verificationNotice : $pdfContainer;
     const val = $cedula.val().trim();
+    clearNotice($noticeTarget);
+
     if (!val) {
-      return alert('Por favor, ingresa una cédula.');
+      const missingMsg = ajaxStrings.verificationMissingCedula || 'Por favor, ingresa una cédula.';
+      showNotice($noticeTarget, [missingMsg], false);
+      return;
     }
 
-    showSpinner($pdfContainer);
+    const $spinnerAnchor = $noticeTarget.length ? $noticeTarget : $cedula;
+    showSpinner($spinnerAnchor);
     const nonce = $('#gcp_nonce').val();
     if (!nonce) {
       removeSpinners();
-      return alert('Error de seguridad.');
+      showNotice($noticeTarget, ['Error de seguridad.'], false);
+      return;
     }
 
     $.post(ajaxurl, {
@@ -171,15 +206,23 @@ jQuery(function($) {
     }, 'json')
     .done(function(resp) {
       removeSpinners();
-      const cls = resp.success ? 'notice-success' : 'notice-error';
       const data = resp && resp.data ? resp.data : null;
-      const fallbackMsg = resp.success ? 'Verificación registrada.' : 'Error al registrar.';
-      const msg = data && data.message ? data.message : fallbackMsg;
-      $pdfContainer.html(`<div class="notice ${cls} is-dismissible"><p>${msg}</p></div>`);
+      if (resp.success) {
+        const successMsg = ajaxStrings.verificationSuccess || 'Verificación Exitosa';
+        const messages = [successMsg];
+        if (data && data.message && data.message !== successMsg) {
+          messages.push(data.message);
+        }
+        showNotice($noticeTarget, messages, true);
+      } else {
+        const fallbackMsg = data && data.message ? data.message : (ajaxStrings.verificationError || 'Error al registrar.');
+        showNotice($noticeTarget, [fallbackMsg], false);
+      }
     })
     .fail(function() {
       removeSpinners();
-      $pdfContainer.html('<div class="notice notice-error is-dismissible"><p>Error de comunicación al registrar.</p></div>');
+      const fallback = ajaxStrings.verificationCommError || 'Error de comunicación al registrar.';
+      showNotice($noticeTarget, [fallback], false);
     });
   });
 
