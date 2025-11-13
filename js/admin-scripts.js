@@ -12,6 +12,9 @@ jQuery(function($) {
   const $pdfContainer = $('#gcp-pdf-link-container');
   const $verificationNotice = $('#gcp-verification-notice');
   const ajaxStrings = typeof gcp_ajax_obj === 'undefined' ? {} : gcp_ajax_obj;
+  const AJAX_URL = typeof ajaxurl !== 'undefined'
+    ? ajaxurl
+    : (ajaxStrings.ajaxurl || '');
   const SPINNER_CLASS = 'gcp-spinner';
   const SLUGS = [
     'nombre_del_curso', 'nombre_de_la_empresa_empl', 'nit_de_la_empresa_emplead',
@@ -114,6 +117,11 @@ jQuery(function($) {
       return alert('Por favor, ingresa más de 3 caracteres para buscar.');
     }
 
+    if (!AJAX_URL) {
+      console.error('URL de AJAX no disponible.');
+      return alert('Error de configuración. Contacta al administrador.');
+    }
+
     const nonce = $('#gcp_nonce').val();
     if (!nonce) {
       console.error('Nonce no encontrado.');
@@ -122,7 +130,7 @@ jQuery(function($) {
 
     showSpinner($cedula);
 
-    $.post(ajaxurl, {
+    $.post(AJAX_URL, {
       action: 'gcp_buscar_contacto_por_cedula',
       cedula: val,
       nonce: nonce
@@ -191,6 +199,10 @@ jQuery(function($) {
     }
 
     const $spinnerAnchor = $noticeTarget.length ? $noticeTarget : $cedula;
+    if (!AJAX_URL) {
+      showNotice($noticeTarget, ['No se pudo determinar la URL de AJAX.'], false);
+      return;
+    }
     showSpinner($spinnerAnchor);
     const nonce = $('#gcp_nonce').val();
     if (!nonce) {
@@ -199,7 +211,7 @@ jQuery(function($) {
       return;
     }
 
-    $.post(ajaxurl, {
+    $.post(AJAX_URL, {
       action: 'gcp_guardar_verificacion_registro',
       nonce: nonce,
       cedula: val
@@ -251,8 +263,14 @@ jQuery(function($) {
       alert('Advertencia: el nombre del curso está vacío.');
     }
 
+    if (!AJAX_URL) {
+      removeSpinners();
+      $pdfContainer.html('<p style="color:red;">No se pudo determinar la URL de AJAX.</p>');
+      return;
+    }
+
     $.ajax({
-      url: ajaxurl,
+      url: AJAX_URL,
       method: 'POST',
       dataType: 'json',
       data: formData

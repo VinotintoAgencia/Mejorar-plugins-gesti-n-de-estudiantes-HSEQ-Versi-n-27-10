@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Generador de Certificados Personalizado
  * Description: Permite generar certificados buscando contactos en FluentCRM y utilizando su API REST, y que los alumnos descarguen sus certificados.
- * Version: 1.5.0
+ * Version: 1.5.1
  * Author: <a href="https://www.vinotintoagencia.com">Vinotinto Agencia</a>
  * Text Domain: gcp-generador-cert
  * License: GPLv2 or later
@@ -12,6 +12,10 @@
 // Prevenir acceso directo
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
+}
+
+if ( ! defined( 'GCP_PLUGIN_VERSION' ) ) {
+    define( 'GCP_PLUGIN_VERSION', '1.5.1' );
 }
 
 // Importar la clase Subscriber de FluentCRM
@@ -597,11 +601,13 @@ function gcp_enqueue_admin_scripts( $hook_suffix ) {
         return;
     }
 
+    $script_version = gcp_get_asset_version( 'js/admin-scripts.js', '1.5.1' );
+
     wp_enqueue_script(
         'gcp-admin-main-script',
         plugin_dir_url( __FILE__ ) . 'js/admin-scripts.js',
         array( 'jquery' ),
-        '1.5.0',
+        $script_version,
         true
     );
 
@@ -618,12 +624,30 @@ function gcp_enqueue_admin_scripts( $hook_suffix ) {
         )
     );
     // Estilos del formulario en la página de administración
+    $style_version = gcp_get_asset_version( 'css/admin-style.css', '1.5.1' );
     wp_enqueue_style(
         'gcp-admin-style',
         plugin_dir_url( __FILE__ ) . 'css/admin-style.css',
         array(),
-        '1.5.0'
+        $style_version
     );
+}
+
+/**
+ * Return the last modification time for an asset to use it as version and avoid stale caches.
+ *
+ * @param string $relative_path Asset path relative to the plugin root.
+ * @param string $fallback      Fallback string when the file does not exist.
+ *
+ * @return string|int
+ */
+function gcp_get_asset_version( $relative_path, $fallback = '' ) {
+    $asset_path = plugin_dir_path( __FILE__ ) . ltrim( $relative_path, '/' );
+    if ( file_exists( $asset_path ) ) {
+        return (string) filemtime( $asset_path );
+    }
+
+    return $fallback ?: ( defined( 'GCP_PLUGIN_VERSION' ) ? GCP_PLUGIN_VERSION : '1.0.0' );
 }
 
 
