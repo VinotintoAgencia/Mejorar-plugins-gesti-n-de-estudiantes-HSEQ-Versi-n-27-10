@@ -1195,15 +1195,15 @@ function gcp_get_certificate_html_template($data) {
       color: #0b0b0b;
       background: #d8d8d8;
       line-height:1.45;
-      font-size:11pt;
-      padding: 10px;
+      font-size:10.5pt;
+      padding: 8px;
     }
     .certificate {
       position: relative;
       max-width: 1040px;
-      min-height: 720px;
+      min-height: 680px;
       margin: 0 auto;
-      padding: 18mm 20mm 16mm;
+      padding: 16mm 18mm 14mm;
       background: #d6d6d6 url('{$background_url}') center/cover no-repeat;
       box-shadow: 0 6px 18px rgba(0,0,0,0.18);
       overflow: hidden;
@@ -1218,25 +1218,25 @@ function gcp_get_certificate_html_template($data) {
     .content { position: relative; z-index: 1; }
     .header-grid {
       display: grid;
-      grid-template-columns: 240px 1fr;
+      grid-template-columns: 220px 1fr;
       align-items: start;
-      column-gap: 16px;
-      margin-bottom: 16px;
+      column-gap: 14px;
+      margin-bottom: 12px;
     }
-    .logo img { width: 230px; height: auto; display: block; }
-    .nit { margin-top: 6px; font-weight: 700; font-size: 10pt; letter-spacing: 0.3px; }
-    .header-meta { text-align: center; color: #0b0b0b; }
-    .header-meta .title-main { font-size: 16pt; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; margin-bottom: 2px; }
-    .header-meta .title-sub { font-size: 14pt; font-weight: 800; letter-spacing: 0.3px; text-transform: uppercase; line-height:1.25; }
-    .header-meta .radicado { margin-top: 6px; font-weight: 600; font-size: 10.5pt; letter-spacing: 0.2px; }
-    .cert-label { font-size: 11pt; font-weight: 700; margin: 6px 0 4px; }
+    .logo img { width: 200px; height: auto; display: block; }
+    .nit { margin-top: 4px; font-weight: 700; font-size: 9.5pt; letter-spacing: 0.2px; }
+    .header-meta { text-align: right; color: #0b0b0b; padding-top: 4px; }
+    .header-meta .title-main { font-size: 15pt; font-weight: 800; letter-spacing: 0.35px; text-transform: uppercase; margin-bottom: 2px; }
+    .header-meta .title-sub { font-size: 13pt; font-weight: 800; letter-spacing: 0.25px; text-transform: uppercase; line-height:1.2; }
+    .header-meta .radicado { margin-top: 5px; font-weight: 700; font-size: 10pt; letter-spacing: 0.2px; }
+    .cert-label { font-size: 11pt; font-weight: 700; margin: 5px 0 3px; }
     .field {
       width: 100%;
       background: linear-gradient(180deg, #ededed 0%, #e2e2e2 100%);
       border: 1px solid #bfc3c8;
       border-radius: 6px;
-      padding: 9px 12px;
-      font-size: 14pt;
+      padding: 8px 11px;
+      font-size: 13.2pt;
       font-weight: 700;
       color: #0b0b0b;
       margin-bottom: 10px;
@@ -1253,24 +1253,24 @@ function gcp_get_certificate_html_template($data) {
     }
     .detail-label {
       background: linear-gradient(180deg, #d7d7d7 0%, #c9c9c9 100%);
-      padding: 9px 10px;
+      padding: 8px 10px;
       font-weight: 700;
-      font-size: 10.5pt;
+      font-size: 10.2pt;
       border-right: 1px solid #bfc3c8;
       display: flex;
       align-items: center;
     }
     .detail-value {
-      padding: 9px 12px;
-      font-size: 11pt;
+      padding: 8px 12px;
+      font-size: 10.2pt;
       font-weight: 600;
       display: flex;
       align-items: center;
       color: #0f0f0f;
     }
     .validation-box {
-      margin: 14px auto 10px;
-      padding: 12px 14px;
+      margin: 12px auto 9px;
+      padding: 11px 13px;
       width: fit-content;
       border: 1px solid #000;
       border-radius: 8px;
@@ -1283,8 +1283,8 @@ function gcp_get_certificate_html_template($data) {
     .signatures {
       display:grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 26px;
-      margin-top: 22px;
+      gap: 22px;
+      margin-top: 18px;
     }
     .signature { text-align:center; }
     .signature .line {
@@ -1296,9 +1296,9 @@ function gcp_get_certificate_html_template($data) {
     .signature p { margin: 0; font-size: 10pt; color:#0f0f0f; line-height:1.4; font-weight: 700; }
     .footer {
       text-align:center;
-      font-size:8.5pt;
+      font-size:8.3pt;
       color:#0f0f0f;
-      margin-top: 18px;
+      margin-top: 14px;
       line-height:1.45;
       font-weight: 600;
     }
