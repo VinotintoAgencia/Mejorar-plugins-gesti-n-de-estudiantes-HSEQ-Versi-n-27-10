@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Generador de Certificados Personalizado
  * Description: Permite generar certificados buscando contactos en FluentCRM y utilizando su API REST, y que los alumnos descarguen sus certificados.
- * Version: 1.5.2
+ * Version: 1.6.0
  * Author: <a href="https://www.vinotintoagencia.com">Vinotinto Agencia</a>
  * Text Domain: gcp-generador-cert
  * License: GPLv2 or later
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! defined( 'GCP_PLUGIN_VERSION' ) ) {
-    define( 'GCP_PLUGIN_VERSION', '1.5.2' );
+    define( 'GCP_PLUGIN_VERSION', '1.6.0' );
 }
 
 // Importar la clase Subscriber de FluentCRM
@@ -1134,51 +1134,217 @@ function gcp_ajax_fetch_student_certificates_handler() {
 // | PLANTILLA HTML DEL CERTIFICADO (CON MPDF)                         |
 // +-------------------------------------------------------------------+
 
-function gcp_get_certificate_html_template($data) {
-    // Sanitizar datos
-    $nombre_completo    = !empty($data['nombre_completo']) ? htmlspecialchars($data['nombre_completo'], ENT_QUOTES, 'UTF-8') : '[Nombre no disponible]';
-    $nombre_curso       = !empty($data['nombre_del_curso']) ? htmlspecialchars($data['nombre_del_curso'], ENT_QUOTES, 'UTF-8') : '[Curso no especificado]';
-    $cedula_display     = !empty($data['cedula']) ? htmlspecialchars($data['cedula'], ENT_QUOTES, 'UTF-8') : '[Cédula no disponible]'; // Para mostrar en el certificado si es necesario.
-    $fecha_expedicion   = !empty($data['fecha_de_expedicion']) ? htmlspecialchars($data['fecha_de_expedicion'], ENT_QUOTES, 'UTF-8') : date_i18n(get_option('date_format'));
-    $intensidad_horaria = !empty($data['intensidad_horaria']) ? htmlspecialchars($data['intensidad_horaria'], ENT_QUOTES, 'UTF-8') : '[N/A]';
-    $nit_empresa        = !empty($data['nit_de_la_empresa_emplead']) ? htmlspecialchars($data['nit_de_la_empresa_emplead'], ENT_QUOTES, 'UTF-8') : '[N/A]'; // Usar este para $nit_empresa_empleadora
-    $arl                = !empty($data['arl']) ? htmlspecialchars($data['arl'], ENT_QUOTES, 'UTF-8') : '[N/A]'; // Usar este para $arl_alumno
-    $fecha_realizado    = !empty($data['fecha_de_realizado']) ? htmlspecialchars($data['fecha_de_realizado'], ENT_QUOTES, 'UTF-8') : '[Fecha no especificada]';
-    $codigo_validacion  = !empty($data['id_ministerio_del_curso']) ? htmlspecialchars($data['id_ministerio_del_curso'], ENT_QUOTES, 'UTF-8') : '[N/A]';
-    $representante_legal_empleadora = !empty($data['representante_legal_de_la']) ? htmlspecialchars($data['representante_legal_de_la'], ENT_QUOTES, 'UTF-8') : '[N/A]';
+/**
+ * Generate sanitized, replaceable tokens for the certificate template.
+ *
+ * @param array $data Certificate payload from the admin form.
+ *
+ * @return array
+ */
+function gcp_build_certificate_tokens( $data ) {
+    $sanitize_text = function( $value ) {
+        return htmlspecialchars( (string) $value, ENT_QUOTES, 'UTF-8' );
+    };
 
-    // Datos Fijos
     $logo_url       = plugin_dir_url( __FILE__ ) . 'assets/images/logo hseq.png';
     $background_url = plugin_dir_url( __FILE__ ) . 'assets/images/background-certificado.svg';
 
     $default_trainer_name    = 'RUBY HIGUITA';
     $default_trainer_license = '[LICENCIA SST RUBY AQUÍ]';
 
-    $trainer_name      = ! empty( $data['trainer_name'] ) ? htmlspecialchars( $data['trainer_name'], ENT_QUOTES, 'UTF-8' ) : $default_trainer_name;
-    $trainer_license   = ! empty( $data['trainer_license'] ) ? htmlspecialchars( $data['trainer_license'], ENT_QUOTES, 'UTF-8' ) : $default_trainer_license;
+    $trainer_name      = ! empty( $data['trainer_name'] ) ? $sanitize_text( $data['trainer_name'] ) : $default_trainer_name;
+    $trainer_license   = ! empty( $data['trainer_license'] ) ? $sanitize_text( $data['trainer_license'] ) : $default_trainer_license;
     $trainer_signature = ! empty( $data['trainer_signature'] ) ? esc_url( $data['trainer_signature'] ) : '';
 
     if ( empty( $data['trainer_name'] ) && ! empty( $data['trainer_id'] ) ) {
         $trainer = gcp_get_trainer_data( $data['trainer_id'] );
         if ( $trainer ) {
-            $trainer_name      = htmlspecialchars( $trainer['name'], ENT_QUOTES, 'UTF-8' );
-            $trainer_license   = htmlspecialchars( $trainer['license'], ENT_QUOTES, 'UTF-8' ) ?: $trainer_license;
+            $trainer_name      = $sanitize_text( $trainer['name'] );
+            $trainer_license   = $trainer['license'] ? $sanitize_text( $trainer['license'] ) : $trainer_license;
             $trainer_signature = $trainer['signature_url'] ? esc_url( $trainer['signature_url'] ) : $trainer_signature;
         }
     }
 
-    $trainer_signature_html = $trainer_signature ? '<img src="' . $trainer_signature . '" alt="Firma del instructor" style="max-height:40px;">' : '&nbsp;';
+    $tokens = array(
+        'nombre_completo'                => ! empty( $data['nombre_completo'] ) ? $sanitize_text( $data['nombre_completo'] ) : '[Nombre no disponible]',
+        'nombre_del_curso'               => ! empty( $data['nombre_del_curso'] ) ? $sanitize_text( $data['nombre_del_curso'] ) : '[Curso no especificado]',
+        'cedula'                         => ! empty( $data['cedula'] ) ? $sanitize_text( $data['cedula'] ) : '[Cédula no disponible]',
+        'fecha_de_expedicion'            => ! empty( $data['fecha_de_expedicion'] ) ? $sanitize_text( $data['fecha_de_expedicion'] ) : date_i18n( get_option( 'date_format' ) ),
+        'intensidad_horaria'             => ! empty( $data['intensidad_horaria'] ) ? $sanitize_text( $data['intensidad_horaria'] ) : '[N/A]',
+        'nit_de_la_empresa_emplead'      => ! empty( $data['nit_de_la_empresa_emplead'] ) ? $sanitize_text( $data['nit_de_la_empresa_emplead'] ) : '[N/A]',
+        'arl'                            => ! empty( $data['arl'] ) ? $sanitize_text( $data['arl'] ) : '[N/A]',
+        'fecha_de_realizado'             => ! empty( $data['fecha_de_realizado'] ) ? $sanitize_text( $data['fecha_de_realizado'] ) : '[Fecha no especificada]',
+        'id_ministerio_del_curso'        => ! empty( $data['id_ministerio_del_curso'] ) ? $sanitize_text( $data['id_ministerio_del_curso'] ) : '[N/A]',
+        'representante_legal_de_la'      => ! empty( $data['representante_legal_de_la'] ) ? $sanitize_text( $data['representante_legal_de_la'] ) : '[N/A]',
+        'fecha_de_inicio'                => ! empty( $data['fecha_de_inicio'] ) ? $sanitize_text( $data['fecha_de_inicio'] ) : '[FECHA INICIO PENDIENTE]',
+        'trainer_name'                   => $trainer_name,
+        'trainer_license'                => $trainer_license,
+        'trainer_signature'              => $trainer_signature,
+        'trainer_signature_image'        => $trainer_signature ? '<img src="' . $trainer_signature . '" alt="Firma del instructor" style="max-height:40px;">' : '&nbsp;',
+        'logo_url'                       => esc_url( $logo_url ),
+        'background_url'                 => esc_url( $background_url ),
+        'representante_legal_cert'       => 'Mónica Marcela Cañas Gomez',
+        'url_verificacion_web'           => 'https://www.hseqdelgolfo.com.co',
+        'web_verificacion_display'       => 'www.hseqdelgolfo.com.co',
+        'licencia_sst_hseq'              => 'Resolución 202460390983 Licencia de Seguridad y Salud en Trabajo de la Secretaría de Salud y Protección Social de Antioquia',
+        'telefonos_verificacion'         => '310 463 2102 - 311 609 5867',
+        'ciudad_expedicion'              => 'Apartadó, Antioquia',
+        'resolucion_mintrabajo'          => '4272 de 2021 Mintrabajo',
+    );
 
-    $representante_legal_certificadora = "Mónica Marcela Cañas Gomez";
-    $url_verificacion_web = "https://www.hseqdelgolfo.com.co";
-    $web_verificacion_display = "www.hseqdelgolfo.com.co";
-    $licencia_sst_hseq = "Resolución 202460390983 Licencia de Seguridad y Salud en Trabajo de la Secretaría de Salud y Protección Social de Antioquia";
-    $telefonos_verificacion = "310 463 2102 - 311 609 5867";
-    $ciudad_expedicion = "Apartadó, Antioquia";
-    $resolucion_mintrabajo = "4272 de 2021 Mintrabajo"; // Corregir a Mintrabajo si es el caso
+    foreach ( $data as $key => $value ) {
+        if ( isset( $tokens[ $key ] ) ) {
+            continue;
+        }
 
-    // Fecha de inicio del curso (campo personalizado)
-    $fecha_inicio_curso = !empty($data['fecha_de_inicio']) ? htmlspecialchars($data['fecha_de_inicio'], ENT_QUOTES, 'UTF-8') : '[FECHA INICIO PENDIENTE]';
+        $tokens[ $key ] = ( '' === $value || null === $value ) ? '' : $sanitize_text( $value );
+    }
+
+    return apply_filters( 'gcp_certificate_tokens', $tokens, $data );
+}
+
+/**
+ * Render custom certificate templates with shortcode-like tokens.
+ *
+ * @param array $tokens Sanitized replacement tokens.
+ *
+ * @return string
+ */
+function gcp_render_custom_certificate_template( $tokens ) {
+    $template = trim( (string) get_option( 'gcp_certificate_custom_template', '' ) );
+    if ( '' === $template ) {
+        return '';
+    }
+
+    $styles    = (string) get_option( 'gcp_certificate_custom_styles', '' );
+    $rendered  = $template;
+
+    foreach ( $tokens as $tag => $value ) {
+        $rendered = str_replace( '[' . $tag . ']', $value, $rendered );
+    }
+
+    if ( $styles ) {
+        $style_block = "\n<style>\n{$styles}\n</style>\n";
+        if ( false !== stripos( $rendered, '</head>' ) ) {
+            $rendered = str_replace( '</head>', $style_block . '</head>', $rendered );
+        } else {
+            $rendered = $style_block . $rendered;
+        }
+    }
+
+    return $rendered;
+}
+
+/**
+ * Default starter template admins can use when no custom template is saved.
+ *
+ * @return string
+ */
+function gcp_get_default_certificate_custom_template() {
+    return <<<HTML
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Certificado personalizado</title>
+</head>
+<body style="font-family: Arial, sans-serif; padding: 24px; background: #f3f3f3;">
+  <div style="max-width: 900px; margin: 0 auto; background: #fff; padding: 24px; box-shadow: 0 0 18px rgba(0,0,0,0.08);">
+    <header style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px;">
+      <div style="flex: 0 0 160px;">
+        <img src="[logo_url]" alt="Logo" style="max-width: 160px; height: auto; display: block;">
+        <div style="font-weight: 700; font-size: 13px; margin-top: 6px;">NIT: 900.673.522-6</div>
+      </div>
+      <div style="text-align: right; flex: 1 1 auto;">
+        <div style="font-size: 18px; font-weight: 700;">CERTIFICADO DE FORMACIÓN Y ENTRENAMIENTO</div>
+        <div style="font-size: 18px; font-weight: 700;">PARA TRABAJOS EN ALTURAS</div>
+        <div style="margin-top: 6px; font-weight: 600;">MINTRABAJO N° RADICADO 08SE2018220000000030200</div>
+      </div>
+    </header>
+
+    <p style="font-size: 15px; line-height: 1.6;">Certificamos que <strong>[nombre_completo]</strong> cursó y aprobó <strong>[nombre_del_curso]</strong> con una intensidad de <strong>[intensidad_horaria] horas</strong> el día <strong>[fecha_de_realizado]</strong> y fue expedido el <strong>[fecha_de_expedicion]</strong>.</p>
+
+    <p style="margin-top: 12px; font-size: 13px;">Documento: <strong>[cedula]</strong> · Validación: <strong>[id_ministerio_del_curso]</strong> · ARL: <strong>[arl]</strong></p>
+
+    <div style="margin-top: 20px; padding: 12px; border: 1px solid #ddd;">
+      <p style="margin: 0 0 6px 0; font-weight: 700;">Datos de empresa</p>
+      <p style="margin: 0;">NIT: [nit_de_la_empresa_emplead] · Representante: [representante_legal_de_la]</p>
+    </div>
+
+    <footer style="margin-top: 20px; font-size: 12px; color: #444;">
+      <p style="margin: 0;">Entrenador: [trainer_name] (Licencia: [trainer_license])</p>
+      <p style="margin: 4px 0 0 0;">Verifica en: [web_verificacion_display] · Código interno: [id_ministerio_del_curso]</p>
+    </footer>
+  </div>
+</body>
+</html>
+HTML;
+}
+
+/**
+ * Shortcode catalog for the admin helper list.
+ *
+ * @return array
+ */
+function gcp_get_certificate_shortcode_catalog() {
+    return array(
+        'nombre_completo'           => __( 'Nombre completo del estudiante', 'gcp-generador-cert' ),
+        'cedula'                    => __( 'Número de documento del estudiante', 'gcp-generador-cert' ),
+        'nombre_del_curso'          => __( 'Nombre del curso aprobado', 'gcp-generador-cert' ),
+        'intensidad_horaria'        => __( 'Intensidad horaria reportada', 'gcp-generador-cert' ),
+        'fecha_de_inicio'           => __( 'Fecha de inicio del curso', 'gcp-generador-cert' ),
+        'fecha_de_realizado'        => __( 'Fecha de finalización del curso', 'gcp-generador-cert' ),
+        'fecha_de_expedicion'       => __( 'Fecha de expedición del certificado', 'gcp-generador-cert' ),
+        'nit_de_la_empresa_emplead' => __( 'NIT de la empresa empleadora', 'gcp-generador-cert' ),
+        'representante_legal_de_la' => __( 'Representante legal de la empresa', 'gcp-generador-cert' ),
+        'arl'                       => __( 'ARL del estudiante', 'gcp-generador-cert' ),
+        'id_ministerio_del_curso'   => __( 'Código/NCI de validación', 'gcp-generador-cert' ),
+        'trainer_name'              => __( 'Nombre del entrenador', 'gcp-generador-cert' ),
+        'trainer_license'           => __( 'Licencia SST del entrenador', 'gcp-generador-cert' ),
+        'trainer_signature_image'   => __( 'Firma del entrenador como imagen', 'gcp-generador-cert' ),
+        'logo_url'                  => __( 'URL del logo configurado del certificado', 'gcp-generador-cert' ),
+        'background_url'            => __( 'URL del fondo ilustrado', 'gcp-generador-cert' ),
+        'web_verificacion_display'  => __( 'URL corta de verificación', 'gcp-generador-cert' ),
+        'url_verificacion_web'      => __( 'URL completa de verificación', 'gcp-generador-cert' ),
+        'licencia_sst_hseq'         => __( 'Texto de licencia SST fija', 'gcp-generador-cert' ),
+        'telefonos_verificacion'    => __( 'Teléfonos de verificación', 'gcp-generador-cert' ),
+        'resolucion_mintrabajo'     => __( 'Resolución de referencia del curso', 'gcp-generador-cert' ),
+        'ciudad_expedicion'         => __( 'Ciudad donde se expide el certificado', 'gcp-generador-cert' ),
+        'representante_legal_cert'  => __( 'Representante legal certificador', 'gcp-generador-cert' ),
+    );
+}
+
+function gcp_get_certificate_html_template($data) {
+    $tokens = gcp_build_certificate_tokens( $data );
+
+    $custom_html = gcp_render_custom_certificate_template( $tokens );
+    if ( $custom_html ) {
+        return $custom_html;
+    }
+
+    $nombre_completo   = $tokens['nombre_completo'];
+    $nombre_curso      = $tokens['nombre_del_curso'];
+    $cedula_display    = $tokens['cedula'];
+    $fecha_expedicion  = $tokens['fecha_de_expedicion'];
+    $intensidad_horaria = $tokens['intensidad_horaria'];
+    $nit_empresa       = $tokens['nit_de_la_empresa_emplead'];
+    $arl               = $tokens['arl'];
+    $fecha_realizado   = $tokens['fecha_de_realizado'];
+    $codigo_validacion = $tokens['id_ministerio_del_curso'];
+    $representante_legal_empleadora = $tokens['representante_legal_de_la'];
+    $fecha_inicio_curso = $tokens['fecha_de_inicio'];
+    $logo_url          = $tokens['logo_url'];
+    $background_url    = $tokens['background_url'];
+    $trainer_signature_html = $tokens['trainer_signature_image'];
+    $trainer_name      = $tokens['trainer_name'];
+    $trainer_license   = $tokens['trainer_license'];
+    $representante_legal_certificadora = $tokens['representante_legal_cert'];
+    $url_verificacion_web  = $tokens['url_verificacion_web'];
+    $web_verificacion_display = $tokens['web_verificacion_display'];
+    $licencia_sst_hseq = $tokens['licencia_sst_hseq'];
+    $telefonos_verificacion = $tokens['telefonos_verificacion'];
+    $ciudad_expedicion = $tokens['ciudad_expedicion'];
+    $resolucion_mintrabajo = $tokens['resolucion_mintrabajo'];
 
 
     // HTML y CSS del certificado (diseño alineado a maqueta)
@@ -1395,6 +1561,102 @@ function gcp_add_students_submenu_page() {
     );
 }
 add_action( 'admin_menu', 'gcp_add_students_submenu_page' );
+
+/**
+ * Submenu para personalizar la plantilla del certificado usando shortcodes.
+ */
+function gcp_add_customize_certificate_submenu_page() {
+    add_submenu_page(
+        'gcp_generar_certificado',
+        __( 'Personalizar certificado', 'gcp-generador-cert' ),
+        __( 'Personalizar certificado', 'gcp-generador-cert' ),
+        'manage_options',
+        'gcp_personalizar_certificado',
+        'gcp_render_personalizar_certificado_page'
+    );
+}
+add_action( 'admin_menu', 'gcp_add_customize_certificate_submenu_page' );
+
+/**
+ * Render the customization page that lets admins edit the certificate template.
+ */
+function gcp_render_personalizar_certificado_page() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_die( __( 'No tienes permisos suficientes para acceder a esta página.', 'gcp-generador-cert' ) );
+    }
+
+    $notice = '';
+
+    if ( isset( $_POST['gcp_personalizar_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['gcp_personalizar_nonce'] ) ), 'gcp_personalizar_certificado' ) ) {
+        $reset = isset( $_POST['gcp_reset_template'] );
+        if ( $reset ) {
+            delete_option( 'gcp_certificate_custom_template' );
+            delete_option( 'gcp_certificate_custom_styles' );
+            $notice = __( 'La plantilla volvió al diseño predeterminado.', 'gcp-generador-cert' );
+        } else {
+            $template_raw = isset( $_POST['gcp_custom_template'] ) ? wp_unslash( $_POST['gcp_custom_template'] ) : '';
+            $styles_raw   = isset( $_POST['gcp_custom_styles'] ) ? wp_unslash( $_POST['gcp_custom_styles'] ) : '';
+
+            $template = current_user_can( 'unfiltered_html' ) ? $template_raw : wp_kses_post( $template_raw );
+            $styles   = current_user_can( 'unfiltered_html' ) ? $styles_raw : wp_strip_all_tags( $styles_raw );
+
+            update_option( 'gcp_certificate_custom_template', $template );
+            update_option( 'gcp_certificate_custom_styles', $styles );
+            $notice = __( 'Plantilla personalizada guardada correctamente.', 'gcp-generador-cert' );
+        }
+    }
+
+    $saved_template = get_option( 'gcp_certificate_custom_template', '' );
+    $saved_styles   = get_option( 'gcp_certificate_custom_styles', '' );
+    $template_value = $saved_template ? $saved_template : gcp_get_default_certificate_custom_template();
+    $shortcodes     = gcp_get_certificate_shortcode_catalog();
+    ?>
+    <div class="wrap gcp-customizer-page">
+        <h1><?php esc_html_e( 'Personalizar certificado', 'gcp-generador-cert' ); ?></h1>
+        <p class="description"><?php esc_html_e( 'Edita el HTML y el CSS de tu certificado. Usa los shortcodes para ubicar los datos dinámicos exactamente donde los necesites.', 'gcp-generador-cert' ); ?></p>
+
+        <?php if ( $notice ) : ?>
+            <div class="notice notice-success is-dismissible"><p><?php echo esc_html( $notice ); ?></p></div>
+        <?php endif; ?>
+
+        <form method="post">
+            <?php wp_nonce_field( 'gcp_personalizar_certificado', 'gcp_personalizar_nonce' ); ?>
+            <table class="form-table" role="presentation">
+                <tbody>
+                    <tr>
+                        <th scope="row"><label for="gcp_custom_template"><?php esc_html_e( 'HTML de la plantilla', 'gcp-generador-cert' ); ?></label></th>
+                        <td>
+                            <textarea id="gcp_custom_template" name="gcp_custom_template" rows="16" class="large-text code" spellcheck="false"><?php echo esc_textarea( $template_value ); ?></textarea>
+                            <p class="description"><?php esc_html_e( 'Se reemplazarán automáticamente los shortcodes entre corchetes con los datos del certificado.', 'gcp-generador-cert' ); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="gcp_custom_styles"><?php esc_html_e( 'CSS adicional', 'gcp-generador-cert' ); ?></label></th>
+                        <td>
+                            <textarea id="gcp_custom_styles" name="gcp_custom_styles" rows="8" class="large-text code" spellcheck="false"><?php echo esc_textarea( $saved_styles ); ?></textarea>
+                            <p class="description"><?php esc_html_e( 'Este CSS se insertará en la cabecera del certificado si el HTML incluye la etiqueta <head>.', 'gcp-generador-cert' ); ?></p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="submit">
+                <button type="submit" class="button button-primary"><?php esc_html_e( 'Guardar cambios', 'gcp-generador-cert' ); ?></button>
+                <button type="submit" class="button" name="gcp_reset_template" value="1">
+                    <?php esc_html_e( 'Restablecer a la plantilla base', 'gcp-generador-cert' ); ?>
+                </button>
+            </p>
+        </form>
+
+        <h2><?php esc_html_e( 'Shortcodes disponibles', 'gcp-generador-cert' ); ?></h2>
+        <p class="description"><?php esc_html_e( 'Coloca estos shortcodes en cualquier parte de tu HTML. También se reemplazarán otros campos personalizados si coinciden con el nombre del campo (por ejemplo, [etapa_del_curso]).', 'gcp-generador-cert' ); ?></p>
+        <ul class="gcp-shortcode-list">
+            <?php foreach ( $shortcodes as $code => $label ) : ?>
+                <li><code>[<?php echo esc_html( $code ); ?>]</code> — <?php echo esc_html( $label ); ?></li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+    <?php
+}
 
 /**
  * Add the verification submenu page.

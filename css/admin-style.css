@@ -167,3 +167,28 @@
   font-size: 14px;
 }
 
+.gcp-customizer-page .description {
+  max-width: 980px;
+}
+
+.gcp-shortcode-list {
+  margin: 12px 0 0 18px;
+  padding: 0;
+  list-style: disc;
+  columns: 2;
+  column-gap: 32px;
+}
+
+.gcp-shortcode-list li {
+  margin-bottom: 8px;
+  break-inside: avoid;
+}
+
+.gcp-shortcode-list code {
+  background: #eef2ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #d7dcf1;
+  font-size: 12px;
+}
+
