@@ -1148,7 +1148,7 @@ function gcp_get_certificate_html_template($data) {
     $representante_legal_empleadora = !empty($data['representante_legal_de_la']) ? htmlspecialchars($data['representante_legal_de_la'], ENT_QUOTES, 'UTF-8') : '[N/A]';
 
     // Datos Fijos
-    $logo_url       = plugin_dir_url( __FILE__ ) . 'assets/images/logo hseq1.png';
+    $logo_url       = plugin_dir_url( __FILE__ ) . 'assets/images/logo hseq.png';
     $background_url = plugin_dir_url( __FILE__ ) . 'assets/images/background-certificado.svg';
 
     $default_trainer_name    = 'RUBY HIGUITA';
@@ -1194,16 +1194,16 @@ function gcp_get_certificate_html_template($data) {
       font-family: 'DejaVu Sans', sans-serif;
       color: #0b0b0b;
       background: #d8d8d8;
-      line-height:1.45;
-      font-size:10.5pt;
-      padding: 8px;
+      line-height:1.4;
+      font-size:10pt;
+      padding: 6px;
     }
     .certificate {
       position: relative;
       max-width: 1040px;
-      min-height: 680px;
+      min-height: 660px;
       margin: 0 auto;
-      padding: 16mm 18mm 14mm;
+      padding: 14mm 16mm 12mm;
       background: #d6d6d6 url('{$background_url}') center/cover no-repeat;
       box-shadow: 0 6px 18px rgba(0,0,0,0.18);
       overflow: hidden;
@@ -1218,34 +1218,33 @@ function gcp_get_certificate_html_template($data) {
     .content { position: relative; z-index: 1; }
     .header-grid {
       display: grid;
-      grid-template-columns: 220px 1fr;
-      align-items: start;
-      column-gap: 14px;
-      margin-bottom: 12px;
+      grid-template-columns: 165px 1fr;
+      align-items: center;
+      column-gap: 10px;
+      margin-bottom: 10px;
     }
-    .logo img { width: 200px; height: auto; display: block; }
-    .nit { margin-top: 4px; font-weight: 700; font-size: 9.5pt; letter-spacing: 0.2px; }
-    .header-meta { text-align: right; color: #0b0b0b; padding-top: 4px; }
-    .header-meta .title-main { font-size: 15pt; font-weight: 800; letter-spacing: 0.35px; text-transform: uppercase; margin-bottom: 2px; }
-    .header-meta .title-sub { font-size: 13pt; font-weight: 800; letter-spacing: 0.25px; text-transform: uppercase; line-height:1.2; }
-    .header-meta .radicado { margin-top: 5px; font-weight: 700; font-size: 10pt; letter-spacing: 0.2px; }
-    .cert-label { font-size: 11pt; font-weight: 700; margin: 5px 0 3px; }
+    .logo img { width: 150px; height: auto; display: block; }
+    .nit { margin-top: 3px; font-weight: 700; font-size: 9pt; letter-spacing: 0.2px; }
+    .header-meta { text-align: right; color: #0b0b0b; padding-top: 2px; line-height: 1.18; }
+    .header-meta .title-sub { font-size: 12pt; font-weight: 800; letter-spacing: 0.2px; text-transform: uppercase; }
+    .header-meta .radicado { margin-top: 3px; font-weight: 700; font-size: 9.6pt; letter-spacing: 0.2px; }
+    .cert-label { font-size: 10.5pt; font-weight: 700; margin: 4px 0 2px; }
     .field {
       width: 100%;
       background: linear-gradient(180deg, #ededed 0%, #e2e2e2 100%);
       border: 1px solid #bfc3c8;
       border-radius: 6px;
-      padding: 8px 11px;
-      font-size: 13.2pt;
+      padding: 7px 10px;
+      font-size: 12.6pt;
       font-weight: 700;
       color: #0b0b0b;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
-    .course-field { font-size: 15pt; }
+    .course-field { font-size: 14pt; }
     .detail-row {
       display: grid;
       grid-template-columns: 32% 68%;
-      margin-bottom: 6px;
+      margin-bottom: 5px;
       overflow: hidden;
       border: 1px solid #c5c7cb;
       border-radius: 6px;
@@ -1253,53 +1252,53 @@ function gcp_get_certificate_html_template($data) {
     }
     .detail-label {
       background: linear-gradient(180deg, #d7d7d7 0%, #c9c9c9 100%);
-      padding: 8px 10px;
+      padding: 7px 9px;
       font-weight: 700;
-      font-size: 10.2pt;
+      font-size: 10pt;
       border-right: 1px solid #bfc3c8;
       display: flex;
       align-items: center;
     }
     .detail-value {
-      padding: 8px 12px;
-      font-size: 10.2pt;
+      padding: 7px 11px;
+      font-size: 10pt;
       font-weight: 600;
       display: flex;
       align-items: center;
       color: #0f0f0f;
     }
     .validation-box {
-      margin: 12px auto 9px;
-      padding: 11px 13px;
+      margin: 10px auto 8px;
+      padding: 10px 12px;
       width: fit-content;
       border: 1px solid #000;
       border-radius: 8px;
       background: #b10c10;
       color: #fff;
-      font-size: 12pt;
+      font-size: 11.4pt;
       font-weight: 800;
       letter-spacing: 0.8px;
     }
     .signatures {
       display:grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 22px;
-      margin-top: 18px;
+      gap: 18px;
+      margin-top: 16px;
     }
     .signature { text-align:center; }
     .signature .line {
-      margin: 0 auto 8px;
+      margin: 0 auto 7px;
       border-top: 1.6px solid #1a1a1a;
       width: 78%;
       height: 22px;
     }
-    .signature p { margin: 0; font-size: 10pt; color:#0f0f0f; line-height:1.4; font-weight: 700; }
+    .signature p { margin: 0; font-size: 9.8pt; color:#0f0f0f; line-height:1.35; font-weight: 700; }
     .footer {
       text-align:center;
-      font-size:8.3pt;
+      font-size:8pt;
       color:#0f0f0f;
-      margin-top: 14px;
-      line-height:1.45;
+      margin-top: 12px;
+      line-height:1.4;
       font-weight: 600;
     }
     .footer strong { color:#000; }
@@ -1315,7 +1314,6 @@ function gcp_get_certificate_html_template($data) {
           <div class="nit">NIT: 900.673.522-6</div>
         </div>
         <div class="header-meta">
-          <div class="title-main">HSEQ DEL GOLFO s.a.s.</div>
           <div class="title-sub">CERTIFICADO DE FORMACIÓN Y ENTRENAMIENTO</div>
           <div class="title-sub">PARA TRABAJOS EN ALTURAS</div>
           <div class="radicado">MINTRABAJO N° RADICADO 08SE2018220000000030200</div>
