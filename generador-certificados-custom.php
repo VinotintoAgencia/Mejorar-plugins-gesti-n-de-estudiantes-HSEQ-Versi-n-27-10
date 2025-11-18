@@ -1146,9 +1146,10 @@ function gcp_get_certificate_html_template($data) {
     $fecha_realizado    = !empty($data['fecha_de_realizado']) ? htmlspecialchars($data['fecha_de_realizado'], ENT_QUOTES, 'UTF-8') : '[Fecha no especificada]';
     $codigo_validacion  = !empty($data['id_ministerio_del_curso']) ? htmlspecialchars($data['id_ministerio_del_curso'], ENT_QUOTES, 'UTF-8') : '[N/A]';
     $representante_legal_empleadora = !empty($data['representante_legal_de_la']) ? htmlspecialchars($data['representante_legal_de_la'], ENT_QUOTES, 'UTF-8') : '[N/A]';
-    
+
     // Datos Fijos
-    $logo_url = plugin_dir_url( __FILE__ ) . 'assets/images/logo hseq.png';
+    $logo_url       = plugin_dir_url( __FILE__ ) . 'assets/images/logo hseq1.png';
+    $background_url = plugin_dir_url( __FILE__ ) . 'assets/images/background-certificado.svg';
 
     $default_trainer_name    = 'RUBY HIGUITA';
     $default_trainer_license = '[LICENCIA SST RUBY AQUÍ]';
@@ -1175,12 +1176,12 @@ function gcp_get_certificate_html_template($data) {
     $telefonos_verificacion = "310 463 2102 - 311 609 5867";
     $ciudad_expedicion = "Apartadó, Antioquia";
     $resolucion_mintrabajo = "4272 de 2021 Mintrabajo"; // Corregir a Mintrabajo si es el caso
-    
+
     // Fecha de inicio del curso (campo personalizado)
     $fecha_inicio_curso = !empty($data['fecha_de_inicio']) ? htmlspecialchars($data['fecha_de_inicio'], ENT_QUOTES, 'UTF-8') : '[FECHA INICIO PENDIENTE]';
 
 
-    // HTML y CSS del certificado (tomado de tu último fragmento)
+    // HTML y CSS del certificado (diseño modernizado)
     $html = <<<HTML
 <!DOCTYPE html>
 <html lang="es">
@@ -1188,183 +1189,174 @@ function gcp_get_certificate_html_template($data) {
   <meta charset="UTF-8">
   <title>Certificado - {$nombre_completo}</title>
   <style>
-    /* Reset y tipografía */
     * { margin:0; padding:0; box-sizing:border-box; }
     body {
-      font-family: 'DejaVu Sans', sans-serif; /* DejaVu Sans es buena para mPDF y caracteres especiales */
-      color: #333;
-      background: #fff;
-      line-height:1.5;
-      font-size:11pt; /* Tamaño base puede ser ajustado */
+      font-family: 'DejaVu Sans', sans-serif;
+      color: #1f1f1f;
+      background: #f7f7f7 url('{$background_url}') center/cover no-repeat;
+      line-height:1.45;
+      font-size:11pt;
     }
     .certificate {
-      padding:15mm; /* Márgenes internos del contenido del certificado */
-      position:relative; /* Para la marca de agua */
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 18mm 18mm 14mm;
+      background: rgba(255,255,255,0.92);
+      border-radius: 12px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.08);
     }
-    /* Marca de agua muy sutil */
-    .certificate::before {
-      content: 'HSEQ del Golfo';
-      position:absolute;
-      top:50%; left:50%;
-      transform:translate(-50%,-50%) rotate(-30deg); /* Ajustar rotación y posición */
-      font-size:80pt; /* Reducir si es muy grande */
-      color:#4f81ba; /* Color primario */
-      opacity:0.03; /* Muy sutil */
-      z-index:0; /* Detrás del contenido */
-    }
-    /* Encabezado con línea de acento */
-    .header {
-      width:100%;
-      margin-bottom:10px;
-      border-bottom:3px solid #4f81ba;
-      padding-bottom:5px;
-      text-align:center;
-    }
-    .header td {
-      vertical-align:middle;
-      text-align:center;
-      padding-bottom:5px;
+    .header-grid {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      align-items: center;
+      column-gap: 16px;
+      margin-bottom: 8px;
+      padding-bottom: 10px;
+      border-bottom: 3px solid #d6dce5;
     }
     .logo img {
-      width:90px !important;
-      height:auto;
+      width: 190px;
+      height: auto;
+      display: block;
+    }
+    .header-meta {
+      text-align: right;
+      color: #334155;
+    }
+    .header-meta h1 {
+      font-size: 16pt;
+      line-height: 1.3;
+      letter-spacing: 0.25px;
+      text-transform: uppercase;
+    }
+    .header-meta small {
       display:block;
-      margin:0 auto 5px;
+      margin-top: 4px;
+      font-size: 9pt;
+      color: #475569;
     }
-    .title {
-      text-align:center;
-      font-weight:700;
-      color:#4f81ba;
-      font-size:16pt;
-      font-family:'DejaVu Sans', sans-serif;
-      padding-left:0;
+    .badge {
+      display: inline-block;
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 10pt;
+      margin-top: 2px;
+      border: 1px solid #e2e8f0;
     }
-    .title small {
-      display:block;
-      font-size:8pt;
-      color:#555;
-      margin-top:4px;
-      font-weight:400;
+    .highlight {
+      font-size: 17pt;
+      color: #0b1328;
+      font-weight: 700;
+      margin: 2px 0 10px;
     }
-    /* Secciones principales */
-    .section {
-      text-align:center;
-      margin:15px 0; /* Reducir margen vertical */
+    .course-name {
+      background: linear-gradient(120deg, #f1f5f9 0%, #e2e8f0 100%);
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #dce3eb;
+      font-size: 15pt;
+      margin-bottom: 10px;
     }
-    .section .label {
-      font-weight:600; /* Un poco menos bold que 700 */
-      font-size:10pt;
-      margin-bottom:3px; /* Menos espacio */
-      color: #222; /* Un poco más oscuro */
+    .info-grid {
+      margin: 6px 0 14px;
+      border:1px solid #e5e7eb;
+      border-radius:10px;
+      overflow:hidden;
+      background:#fafafa;
     }
-    .section .value {
-      font-size:14pt; /* Un poco más pequeño que antes */
-      font-weight:700;
-      color: #000; /* Negro para el nombre y curso */
-      margin-top:1px;
+    .info-grid .row {
+      display:grid;
+      grid-template-columns: 32% 68%;
+      padding: 10px 12px;
+      border-bottom:1px solid #e5e7eb;
+      align-items: start;
     }
-    /* Tabla de detalles refinada */
-    .details {
-      width:100%;
-      border-collapse:collapse;
-      margin:15px 0;
-      font-size:9pt;
+    .info-grid .row:last-child { border-bottom:0; }
+    .info-grid .label { font-weight:600; color:#1f2937; font-size:10pt; }
+    .info-grid .value { color:#111827; font-size:10.5pt; }
+    .validation-box {
+      margin: 12px 0;
+      padding: 12px;
+      border-radius: 10px;
+      background: #0b1328;
+      color: #f8fafc;
+      text-align: center;
+      letter-spacing: 0.6px;
+      font-weight: 700;
+      font-size: 11.5pt;
     }
-    .details th, .details td {
-      padding:7px 5px; /* Ajustar padding */
-      text-align:left;
-      border-bottom:1px solid #e0e0e0;
-    }
-    .details th {
-      background:#4f81ba; /* Color primario */
-      color:#fff;
-      font-weight:600; /* Un poco menos bold */
-    }
-    .details tr:nth-child(even) td { background: #f8f9fa; } /* Color de fila alterno más sutil */
-    /* Firmas */
     .signatures {
-      width:100%;
-      margin-top:25mm; /* Más espacio antes de las firmas */
-      margin-bottom: 15mm;
-      font-size:9pt;
-      table-layout: fixed; /* Ayuda a que las celdas respeten el ancho */
+      display:grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      margin-top: 18px;
     }
-    .signatures td {
-      width:50%; /* Asegurar anchos iguales */
+    .signature {
       text-align:center;
-      vertical-align:top;
-      padding:0 10px;
+      padding-top: 12px;
     }
-    .sign-line {
-      border-top:1px solid #333;
-      width:70%; /* Línea más corta */
-      margin:0 auto 5px auto; /* Menos espacio después de la línea */
-      height: 20px; /* Espacio para la firma */
+    .signature .line {
+      margin: 0 auto 6px;
+      border-top: 1.5px solid #475569;
+      width: 80%;
+      height: 18px;
     }
-    .sign-line p { margin:0; line-height: 1.3; }
-    /* Pie de página minimalista */
+    .signature p { margin: 0; font-size: 10pt; color:#111827; line-height:1.35; }
     .footer {
       text-align:center;
-      font-size:7.5pt; /* Un poco más grande */
-      color:#666; /* Un poco más oscuro */
-      border-top:1px solid #e0e0e0;
-      padding-top:8px;
-      margin-top: 15mm;
+      font-size:8pt;
+      color:#4b5563;
+      margin-top: 20px;
+      line-height:1.4;
     }
-    .footer p { margin-bottom: 3px; }
-    .footer a {
-      color:#4f81ba; /* Color primario */
-      text-decoration:none;
-      font-weight:600;
-    }
+    .footer strong { color:#111827; }
+    .footer a { color:#0f172a; text-decoration:none; font-weight:600; }
   </style>
 </head>
 <body>
   <div class="certificate">
-    <table class="header">
-      <tr>
-        <td class="logo" colspan="2"><img src="{$logo_url}" alt="Logo HSEQ"></td>
-      </tr>
-      <tr>
-        <td class="title" colspan="2">
-          <strong>Certificado de formación y entrenamiento<br>para trabajos en alturas</strong>
-          <br><small>MINTRABAJO N° RADICADO 08SE2018220000000030200</small>
-        </td>
-      </tr>
-    </table>
-
-    <div class="section">
-      <div class="label"><strong>Certifica que:</strong></div>
-      <div class="value">{$nombre_completo}</div>
+    <div class="header-grid">
+      <div class="logo"><img src="{$logo_url}" alt="Logo HSEQ"></div>
+      <div class="header-meta">
+        <h1>Certificado de formación y entrenamiento<br>para trabajos en alturas</h1>
+        <small>MINTRABAJO N° RADICADO 08SE2018220000000030200<br>NIT: 900.673.522-6</small>
+      </div>
     </div>
 
-    <div class="section">
-      <div class="label"><strong>Cursó y aprobó la formación y entrenamiento en:</strong></div>
-      <div class="value">"{$nombre_curso}"</div>
+    <div>
+      <div class="badge">Certifica que:</div>
+      <div class="highlight">{$nombre_completo}</div>
     </div>
 
-    <table class="details">
-      <tr><th>Intensidad</th><td>{$intensidad_horaria} horas, bajo la resolución {$resolucion_mintrabajo}</td></tr>
-      <tr><th>Realizado en</th><td>{$ciudad_expedicion} entre el {$fecha_inicio_curso} y el {$fecha_realizado}</td></tr>
-      <tr><th>Expedido en</th><td>{$ciudad_expedicion}, el {$fecha_expedicion}</td></tr>
-      <tr><th>Validación del certificado</th><td>NCI - HSEQ - {$codigo_validacion}</td></tr>
-      <tr><th>NIT empresa empleadora</th><td>{$nit_empresa}</td></tr>
-      <tr><th>Representante legal empresa empleadora</th><td>{$representante_legal_empleadora}</td></tr>
-      <tr><th>ARL</th><td>{$arl}</td></tr>
-    </table>
+    <div>
+      <div class="badge">Curso y aprobó la formación y entrenamiento en:</div>
+      <div class="course-name">{$nombre_curso}</div>
+    </div>
 
-    <table class="signatures">
-      <tr>
-        <td>
-          <div class="sign-line">{$trainer_signature_html}</div>
-          <p>{$trainer_name}<br>Entrenador trabajo en altura<br>Licencia SST: {$trainer_license}</p>
-        </td>
-        <td>
-          <div class="sign-line">&nbsp;</div>
-          <p>{$representante_legal_certificadora}<br>Representante legal</p>
-        </td>
-      </tr>
-    </table>
+    <div class="info-grid">
+      <div class="row"><div class="label">Intensidad</div><div class="value">{$intensidad_horaria} horas, bajo la resolución {$resolucion_mintrabajo}</div></div>
+      <div class="row"><div class="label">Realizado en</div><div class="value">{$ciudad_expedicion} entre el {$fecha_inicio_curso} y el {$fecha_realizado}</div></div>
+      <div class="row"><div class="label">Expedido en</div><div class="value">{$ciudad_expedicion}, el {$fecha_expedicion}</div></div>
+      <div class="row"><div class="label">NIT empresa empleadora</div><div class="value">{$nit_empresa}</div></div>
+      <div class="row"><div class="label">Representante legal empresa empleadora</div><div class="value">{$representante_legal_empleadora}</div></div>
+      <div class="row"><div class="label">ARL</div><div class="value">{$arl}</div></div>
+    </div>
+
+    <div class="validation-box">NCI - HSEQ - {$codigo_validacion}</div>
+
+    <div class="signatures">
+      <div class="signature">
+        <div class="line">{$trainer_signature_html}</div>
+        <p>{$trainer_name}<br>Entrenador trabajo en altura<br>Licencia SST: {$trainer_license}</p>
+      </div>
+      <div class="signature">
+        <div class="line">&nbsp;</div>
+        <p>{$representante_legal_certificadora}<br>Representante legal</p>
+      </div>
+    </div>
 
     <div class="footer">
       <p>{$licencia_sst_hseq}</p>
