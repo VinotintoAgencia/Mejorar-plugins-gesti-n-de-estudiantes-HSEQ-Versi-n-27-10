@@ -1135,6 +1135,32 @@ function gcp_ajax_fetch_student_certificates_handler() {
 // +-------------------------------------------------------------------+
 
 /**
+ * Get the active certificate background image.
+ *
+ * @return string
+ */
+function gcp_get_certificate_background_url() {
+    $default = plugin_dir_url( __FILE__ ) . 'assets/images/background-certificado.svg';
+    $custom  = trim( (string) get_option( 'gcp_certificate_background_url', '' ) );
+
+    if ( '' === $custom ) {
+        return $default;
+    }
+
+    $filetype = wp_check_filetype( $custom, array(
+        'png'  => 'image/png',
+        'jpg'  => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+    ) );
+
+    if ( empty( $filetype['ext'] ) ) {
+        return $default;
+    }
+
+    return esc_url( $custom );
+}
+
+/**
  * Generate sanitized, replaceable tokens for the certificate template.
  *
  * @param array $data Certificate payload from the admin form.
@@ -1147,7 +1173,7 @@ function gcp_build_certificate_tokens( $data ) {
     };
 
     $logo_url       = plugin_dir_url( __FILE__ ) . 'assets/images/logo hseq.png';
-    $background_url = plugin_dir_url( __FILE__ ) . 'assets/images/background-certificado.svg';
+    $background_url = gcp_get_certificate_background_url();
 
     $default_trainer_name    = 'RUBY HIGUITA';
     $default_trainer_license = '[LICENCIA SST RUBY AQUÍ]';
@@ -1586,28 +1612,52 @@ function gcp_render_personalizar_certificado_page() {
     }
 
     $notice = '';
+    $error  = '';
 
     if ( isset( $_POST['gcp_personalizar_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['gcp_personalizar_nonce'] ) ), 'gcp_personalizar_certificado' ) ) {
         $reset = isset( $_POST['gcp_reset_template'] );
         if ( $reset ) {
             delete_option( 'gcp_certificate_custom_template' );
             delete_option( 'gcp_certificate_custom_styles' );
+            delete_option( 'gcp_certificate_background_url' );
             $notice = __( 'La plantilla volvió al diseño predeterminado.', 'gcp-generador-cert' );
         } else {
             $template_raw = isset( $_POST['gcp_custom_template'] ) ? wp_unslash( $_POST['gcp_custom_template'] ) : '';
             $styles_raw   = isset( $_POST['gcp_custom_styles'] ) ? wp_unslash( $_POST['gcp_custom_styles'] ) : '';
+            $bg_raw       = isset( $_POST['gcp_background_url'] ) ? wp_unslash( $_POST['gcp_background_url'] ) : '';
 
             $template = current_user_can( 'unfiltered_html' ) ? $template_raw : wp_kses_post( $template_raw );
             $styles   = current_user_can( 'unfiltered_html' ) ? $styles_raw : wp_strip_all_tags( $styles_raw );
+            $bg_url   = esc_url_raw( trim( $bg_raw ) );
 
             update_option( 'gcp_certificate_custom_template', $template );
             update_option( 'gcp_certificate_custom_styles', $styles );
-            $notice = __( 'Plantilla personalizada guardada correctamente.', 'gcp-generador-cert' );
+
+            if ( '' === $bg_url ) {
+                delete_option( 'gcp_certificate_background_url' );
+            } else {
+                $allowed_backgrounds = array(
+                    'png'  => 'image/png',
+                    'jpg'  => 'image/jpeg',
+                    'jpeg' => 'image/jpeg',
+                );
+                $filetype = wp_check_filetype( $bg_url, $allowed_backgrounds );
+                if ( empty( $filetype['ext'] ) ) {
+                    $error = __( 'El fondo debe ser una imagen PNG o JPG. No se guardó la URL proporcionada.', 'gcp-generador-cert' );
+                } else {
+                    update_option( 'gcp_certificate_background_url', $bg_url );
+                }
+            }
+
+            if ( ! $error ) {
+                $notice = __( 'Plantilla personalizada guardada correctamente.', 'gcp-generador-cert' );
+            }
         }
     }
 
     $saved_template = get_option( 'gcp_certificate_custom_template', '' );
     $saved_styles   = get_option( 'gcp_certificate_custom_styles', '' );
+    $saved_bg_url   = get_option( 'gcp_certificate_background_url', '' );
     $template_value = $saved_template ? $saved_template : gcp_get_default_certificate_custom_template();
     $shortcodes     = gcp_get_certificate_shortcode_catalog();
     ?>
@@ -1617,6 +1667,9 @@ function gcp_render_personalizar_certificado_page() {
 
         <?php if ( $notice ) : ?>
             <div class="notice notice-success is-dismissible"><p><?php echo esc_html( $notice ); ?></p></div>
+        <?php endif; ?>
+        <?php if ( $error ) : ?>
+            <div class="notice notice-error is-dismissible"><p><?php echo esc_html( $error ); ?></p></div>
         <?php endif; ?>
 
         <form method="post">
@@ -1635,6 +1688,13 @@ function gcp_render_personalizar_certificado_page() {
                         <td>
                             <textarea id="gcp_custom_styles" name="gcp_custom_styles" rows="8" class="large-text code" spellcheck="false"><?php echo esc_textarea( $saved_styles ); ?></textarea>
                             <p class="description"><?php esc_html_e( 'Este CSS se insertará en la cabecera del certificado si el HTML incluye la etiqueta <head>.', 'gcp-generador-cert' ); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="gcp_background_url"><?php esc_html_e( 'Fondo del certificado (opcional)', 'gcp-generador-cert' ); ?></label></th>
+                        <td>
+                            <input type="url" id="gcp_background_url" name="gcp_background_url" class="regular-text" value="<?php echo esc_attr( $saved_bg_url ); ?>" placeholder="https://tusitio.com/wp-content/uploads/fondo-certificado.png">
+                            <p class="description"><?php esc_html_e( 'Pega la URL de una imagen PNG o JPG de tu biblioteca de medios. Déjalo vacío para usar el fondo predeterminado.', 'gcp-generador-cert' ); ?></p>
                         </td>
                     </tr>
                 </tbody>
