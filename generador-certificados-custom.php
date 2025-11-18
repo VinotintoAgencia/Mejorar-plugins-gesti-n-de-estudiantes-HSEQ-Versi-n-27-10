@@ -1873,6 +1873,7 @@ function gcp_attach_custom_fields_to_student_records( $records, $custom_field_la
 }
 
 add_action( 'admin_init', 'gcp_handle_export_estudiantes' );
+add_action( 'admin_init', 'gcp_handle_export_certificados' );
 
 /**
  * Allow exporting the students table as CSV.
@@ -1971,6 +1972,100 @@ function gcp_handle_export_estudiantes() {
 
             fputcsv( $output, $row );
         }
+    }
+
+    fclose( $output );
+    exit;
+}
+
+/**
+ * Allow exporting the certificates table as CSV.
+ */
+function gcp_handle_export_certificados() {
+    if ( empty( $_GET['page'] ) || 'gcp_administrar_certificados' !== $_GET['page'] ) {
+        return;
+    }
+
+    if ( empty( $_GET['gcp_export'] ) || 'csv' !== $_GET['gcp_export'] ) {
+        return;
+    }
+
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+
+    $nonce = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
+    if ( ! wp_verify_nonce( $nonce, 'gcp_export_certificates' ) ) {
+        wp_die( __( 'Error de seguridad: Nonce inválido.', 'gcp-generador-cert' ) );
+    }
+
+    $filters = gcp_get_certificate_filters_from_request();
+    $data    = gcp_get_enriched_certificates_data( $filters );
+
+    $filename = 'certificados-emitidos-' . gmdate( 'Ymd-His' ) . '.csv';
+
+    header( 'Content-Type: text/csv; charset=utf-8' );
+    header( 'Content-Disposition: attachment; filename=' . $filename );
+
+    $output = fopen( 'php://output', 'w' );
+
+    $custom_field_labels = gcp_get_all_fluentcrm_custom_field_labels();
+    $custom_field_count  = ! empty( $custom_field_labels ) ? count( $custom_field_labels ) : 0;
+    $cert_table_colspan  = 14 + $custom_field_count; // Columnas base + campos personalizados
+
+    $headers = array(
+        'ID Certificado',
+        'Cédula',
+        'Nombre',
+        'Apellido',
+        'Email',
+        'Curso (Certificado)',
+        'Curso (Registro)',
+        'Etapa del curso',
+        'Nombre Empresa',
+        'NIT Empresa',
+        'Fecha Inscripción',
+        'Fecha Emisión',
+        'ID Validación',
+        'Archivo',
+    );
+
+    if ( ! empty( $custom_field_labels ) ) {
+        foreach ( $custom_field_labels as $label ) {
+            $headers[] = $label;
+        }
+    }
+
+    fputcsv( $output, $headers );
+
+    foreach ( $data as $row ) {
+        $date_verified = ! empty( $row['date_verified'] ) ? mysql2date( 'Y-m-d H:i:s', $row['date_verified'] ) : '';
+        $date_issued   = ! empty( $row['date_issued'] ) ? mysql2date( 'Y-m-d H:i:s', $row['date_issued'] ) : '';
+
+        $csv_row = array(
+            $row['id'],
+            $row['cedula_alumno'],
+            $row['first_name'],
+            $row['last_name'],
+            $row['email'],
+            $row['course_name_cert'],
+            $row['course_name_verified'],
+            $row['etapa_del_curso'],
+            $row['nombre_empresa'],
+            $row['nit_empresa'],
+            $date_verified,
+            $date_issued,
+            $row['validation_id'],
+            $row['certificate_filename'],
+        );
+
+        if ( ! empty( $custom_field_labels ) ) {
+            foreach ( $custom_field_labels as $slug => $label ) {
+                $csv_row[] = isset( $row['custom_fields'][ $slug ] ) ? $row['custom_fields'][ $slug ] : '';
+            }
+        }
+
+        fputcsv( $output, $csv_row );
     }
 
     fclose( $output );
@@ -2282,26 +2377,22 @@ add_action( 'admin_init', 'gcp_handle_delete_certificate_action' ); // admin_ini
  * Renderiza el contenido de la página de administración de certificados.
  */
 function gcp_render_administrar_certificados_page() {
-    global $wpdb;
-    $table_name = $wpdb->prefix . 'gcp_issued_certificates';
+    $filters      = gcp_get_certificate_filters_from_request();
+    $certificates = gcp_get_enriched_certificates_data( $filters );
 
-    $search_cedula = isset( $_GET['s_cedula'] ) ? sanitize_text_field( trim( $_GET['s_cedula'] ) ) : '';
+    $export_url = add_query_arg(
+        array(
+            'page'       => 'gcp_administrar_certificados',
+            's_cedula'   => $filters['cedula'],
+            's_nit'      => $filters['nit'],
+            's_course'   => $filters['course'],
+            'gcp_export' => 'csv',
+            '_wpnonce'   => wp_create_nonce( 'gcp_export_certificates' ),
+        ),
+        admin_url( 'admin.php' )
+    );
 
-    // Preparar consulta SQL
-    $sql = "SELECT id, cedula_alumno, course_name, certificate_filename, certificate_url, date_issued, validation_id FROM {$table_name}";
-    $params = array();
-
-    if ( ! empty( $search_cedula ) ) {
-        $sql .= " WHERE cedula_alumno = %s";
-        $params[] = $search_cedula;
-    }
-    $sql .= " ORDER BY date_issued DESC";
-
-    if ( ! empty( $params ) ) {
-        $certificates = $wpdb->get_results( $wpdb->prepare( $sql, $params ) );
-    } else {
-        $certificates = $wpdb->get_results( $sql );
-    }
+    $custom_field_labels = gcp_get_all_fluentcrm_custom_field_labels();
     ?>
     <div class="wrap">
         <h1><?php _e( 'Administrar Certificados Emitidos', 'gcp-generador-cert' ); ?></h1>
@@ -2312,11 +2403,21 @@ function gcp_render_administrar_certificados_page() {
             <input type="hidden" name="page" value="gcp_administrar_certificados">
             <p class="search-box">
                 <label class="screen-reader-text" for="gcp-cedula-search-input"><?php _e( 'Buscar por Cédula:', 'gcp-generador-cert' ); ?></label>
-                <input type="search" id="gcp-cedula-search-input" name="s_cedula" value="<?php echo esc_attr( $search_cedula ); ?>" placeholder="<?php _e( 'Ingrese Cédula', 'gcp-generador-cert' ); ?>">
-                <input type="submit" id="search-submit" class="button" value="<?php _e( 'Buscar Cédula', 'gcp-generador-cert' ); ?>">
-                <?php if ( ! empty( $search_cedula ) ) : ?>
+                <input type="search" id="gcp-cedula-search-input" name="s_cedula" value="<?php echo esc_attr( $filters['cedula'] ); ?>" placeholder="<?php _e( 'Ingrese Cédula', 'gcp-generador-cert' ); ?>">
+
+                <label class="screen-reader-text" for="gcp-nit-search-input"><?php _e( 'Buscar por NIT:', 'gcp-generador-cert' ); ?></label>
+                <input type="search" id="gcp-nit-search-input" name="s_nit" value="<?php echo esc_attr( $filters['nit'] ); ?>" placeholder="<?php _e( 'Ingrese NIT', 'gcp-generador-cert' ); ?>">
+
+                <label class="screen-reader-text" for="gcp-course-search-input"><?php _e( 'Buscar por Curso:', 'gcp-generador-cert' ); ?></label>
+                <input type="search" id="gcp-course-search-input" name="s_course" value="<?php echo esc_attr( $filters['course'] ); ?>" placeholder="<?php _e( 'Ingrese Curso', 'gcp-generador-cert' ); ?>">
+
+                <input type="submit" id="search-submit" class="button" value="<?php _e( 'Buscar', 'gcp-generador-cert' ); ?>">
+                <?php if ( ! empty( $filters['cedula'] ) || ! empty( $filters['nit'] ) || ! empty( $filters['course'] ) ) : ?>
                     <a href="<?php echo esc_url( admin_url('admin.php?page=gcp_administrar_certificados') ); ?>" class="button" style="margin-left: 5px;"><?php _e( 'Mostrar Todos', 'gcp-generador-cert' ); ?></a>
                 <?php endif; ?>
+                <a href="<?php echo esc_url( $export_url ); ?>" class="button button-primary" style="margin-left:5px;">
+                    <?php _e( 'Exportar CSV', 'gcp-generador-cert' ); ?>
+                </a>
             </p>
         </form>
 
@@ -2324,10 +2425,23 @@ function gcp_render_administrar_certificados_page() {
             <thead>
                 <tr>
                     <th scope="col"><?php _e( 'Cédula Alumno', 'gcp-generador-cert' ); ?></th>
-                    <th scope="col"><?php _e( 'Curso', 'gcp-generador-cert' ); ?></th>
+                    <th scope="col"><?php _e( 'Nombre', 'gcp-generador-cert' ); ?></th>
+                    <th scope="col"><?php _e( 'Apellido', 'gcp-generador-cert' ); ?></th>
+                    <th scope="col"><?php _e( 'Email', 'gcp-generador-cert' ); ?></th>
+                    <th scope="col"><?php _e( 'Curso (Cert.)', 'gcp-generador-cert' ); ?></th>
+                    <th scope="col"><?php _e( 'Curso (Registro)', 'gcp-generador-cert' ); ?></th>
+                    <th scope="col"><?php _e( 'Etapa del curso', 'gcp-generador-cert' ); ?></th>
+                    <th scope="col"><?php _e( 'Nombre Empresa', 'gcp-generador-cert' ); ?></th>
+                    <th scope="col"><?php _e( 'NIT Empresa', 'gcp-generador-cert' ); ?></th>
+                    <th scope="col"><?php _e( 'Fecha Inscripción', 'gcp-generador-cert' ); ?></th>
                     <th scope="col"><?php _e( 'Fecha Emisión', 'gcp-generador-cert' ); ?></th>
                     <th scope="col"><?php _e( 'ID Validación', 'gcp-generador-cert' ); ?></th>
                     <th scope="col"><?php _e( 'Archivo', 'gcp-generador-cert' ); ?></th>
+                    <?php if ( ! empty( $custom_field_labels ) ) : ?>
+                        <?php foreach ( $custom_field_labels as $label ) : ?>
+                            <th scope="col"><?php echo esc_html( $label ); ?></th>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                     <th scope="col"><?php _e( 'Acciones', 'gcp-generador-cert' ); ?></th>
                 </tr>
             </thead>
@@ -2335,28 +2449,41 @@ function gcp_render_administrar_certificados_page() {
                 <?php if ( ! empty( $certificates ) ) : ?>
                     <?php foreach ( $certificates as $cert ) : ?>
                         <tr>
-                            <td><?php echo esc_html( $cert->cedula_alumno ); ?></td>
-                            <td><?php echo esc_html( $cert->course_name ); ?></td>
-                            <td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $cert->date_issued ) ) ); ?></td>
-                            <td><?php echo esc_html( $cert->validation_id ? $cert->validation_id : 'N/A' ); ?></td>
+                            <td><?php echo esc_html( $cert['cedula_alumno'] ); ?></td>
+                            <td><?php echo esc_html( $cert['first_name'] ); ?></td>
+                            <td><?php echo esc_html( $cert['last_name'] ); ?></td>
+                            <td><?php echo esc_html( $cert['email'] ); ?></td>
+                            <td><?php echo esc_html( $cert['course_name_cert'] ); ?></td>
+                            <td><?php echo esc_html( $cert['course_name_verified'] ); ?></td>
+                            <td><?php echo esc_html( $cert['etapa_del_curso'] ); ?></td>
+                            <td><?php echo esc_html( $cert['nombre_empresa'] ); ?></td>
+                            <td><?php echo esc_html( $cert['nit_empresa'] ); ?></td>
+                            <td><?php echo esc_html( $cert['date_verified_display'] ); ?></td>
+                            <td><?php echo esc_html( $cert['date_issued_display'] ); ?></td>
+                            <td><?php echo esc_html( $cert['validation_id'] ); ?></td>
                             <td>
-                                <?php if ( ! empty( $cert->certificate_url ) ) : ?>
-                                    <a href="<?php echo esc_url( $cert->certificate_url ); ?>" target="_blank">
-                                        <?php echo esc_html( $cert->certificate_filename ); ?>
+                                <?php if ( ! empty( $cert['certificate_url'] ) ) : ?>
+                                    <a href="<?php echo esc_url( $cert['certificate_url'] ); ?>" target="_blank">
+                                        <?php echo esc_html( $cert['certificate_filename'] ); ?>
                                     </a>
                                 <?php else : ?>
                                     <?php _e( 'No disponible', 'gcp-generador-cert' ); ?>
                                 <?php endif; ?>
                             </td>
+                            <?php if ( ! empty( $custom_field_labels ) ) : ?>
+                                <?php foreach ( $custom_field_labels as $slug => $label ) : ?>
+                                    <td><?php echo isset( $cert['custom_fields'][ $slug ] ) ? esc_html( $cert['custom_fields'][ $slug ] ) : ''; ?></td>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
                             <td>
                                 <?php
                                 $delete_link = add_query_arg( array(
                                     'action'  => 'gcp_delete_certificate',
-                                    'cert_id' => $cert->id,
-                                    '_wpnonce'=> wp_create_nonce( 'gcp_delete_certificate_' . $cert->id )
+                                    'cert_id' => $cert['id'],
+                                    '_wpnonce'=> wp_create_nonce( 'gcp_delete_certificate_' . $cert['id'] )
                                 ), admin_url( 'admin.php?page=gcp_administrar_certificados' ) ); // Redirige a la misma página admin tras la acción
                                 ?>
-                                <a href="<?php echo esc_url( $delete_link ); ?>" 
+                                <a href="<?php echo esc_url( $delete_link ); ?>"
                                    onclick="return confirm('<?php esc_attr_e( '¿Estás seguro de que deseas eliminar este certificado? Esta acción no se puede deshacer.', 'gcp-generador-cert' ); ?>');"
                                    style="color: #a00;"><?php _e( 'Eliminar', 'gcp-generador-cert' ); ?></a>
                             </td>
@@ -2364,13 +2491,157 @@ function gcp_render_administrar_certificados_page() {
                     <?php endforeach; ?>
                 <?php else : ?>
                     <tr>
-                        <td colspan="6"><?php _e( 'No se encontraron certificados.', 'gcp-generador-cert' ); ?></td>
+                        <td colspan="<?php echo intval( $cert_table_colspan ); ?>"><?php _e( 'No se encontraron certificados.', 'gcp-generador-cert' ); ?></td>
                     </tr>
                 <?php endif; ?>
             </tbody>
         </table>
     </div>
     <?php
+}
+
+/**
+ * Normalize certificate filters from the current request.
+ *
+ * @return array
+ */
+function gcp_get_certificate_filters_from_request() {
+    return array(
+        'cedula' => isset( $_GET['s_cedula'] ) ? sanitize_text_field( trim( wp_unslash( $_GET['s_cedula'] ) ) ) : '',
+        'nit'    => isset( $_GET['s_nit'] ) ? sanitize_text_field( trim( wp_unslash( $_GET['s_nit'] ) ) ) : '',
+        'course' => isset( $_GET['s_course'] ) ? sanitize_text_field( trim( wp_unslash( $_GET['s_course'] ) ) ) : '',
+    );
+}
+
+/**
+ * Retrieve certificate rows enriched with student data and formatted values.
+ *
+ * @param array $filters
+ * @return array
+ */
+function gcp_get_enriched_certificates_data( $filters ) {
+    global $wpdb;
+
+    $cert_table    = $wpdb->prefix . 'gcp_issued_certificates';
+    $verif_table   = $wpdb->prefix . 'gcp_contact_verifications';
+    $custom_labels = gcp_get_all_fluentcrm_custom_field_labels();
+
+    $where  = array();
+    $params = array();
+
+    $sql = "SELECT id, cedula_alumno, fluentcrm_contact_id, course_name, certificate_filename, certificate_url, date_issued, validation_id FROM {$cert_table}";
+
+    if ( ! empty( $filters['cedula'] ) ) {
+        $where[]  = 'cedula_alumno = %s';
+        $params[] = $filters['cedula'];
+    }
+
+    if ( ! empty( $where ) ) {
+        $sql .= ' WHERE ' . implode( ' AND ', $where );
+    }
+
+    $sql .= ' ORDER BY date_issued DESC';
+
+    $cert_rows = ! empty( $params ) ? $wpdb->get_results( $wpdb->prepare( $sql, $params ) ) : $wpdb->get_results( $sql );
+
+    if ( empty( $cert_rows ) ) {
+        return array();
+    }
+
+    $cedulas = array();
+    foreach ( $cert_rows as $row ) {
+        if ( ! empty( $row->cedula_alumno ) ) {
+            $cedulas[] = sanitize_text_field( $row->cedula_alumno );
+        }
+    }
+    $cedulas = array_unique( $cedulas );
+
+    $ver_map = array();
+    if ( ! empty( $cedulas ) ) {
+        $placeholders = implode( ',', array_fill( 0, count( $cedulas ), '%s' ) );
+        $ver_sql      = "SELECT * FROM {$verif_table} WHERE cedula_alumno IN ({$placeholders}) ORDER BY date_verified DESC";
+        $ver_records  = $wpdb->get_results( $wpdb->prepare( $ver_sql, $cedulas ) );
+
+        if ( ! empty( $ver_records ) ) {
+            $ver_records = gcp_attach_custom_fields_to_student_records( $ver_records, $custom_labels );
+            foreach ( $ver_records as $record ) {
+                $key = sanitize_text_field( $record->cedula_alumno );
+                if ( ! isset( $ver_map[ $key ] ) ) {
+                    $ver_map[ $key ] = $record;
+                }
+            }
+        }
+    }
+
+    $results = array();
+
+    foreach ( $cert_rows as $row ) {
+        $cedula     = sanitize_text_field( $row->cedula_alumno );
+        $ver_record = isset( $ver_map[ $cedula ] ) ? $ver_map[ $cedula ] : null;
+
+        $date_verified_display = '';
+        if ( ! empty( $ver_record ) && ! empty( $ver_record->date_verified ) ) {
+            $timestamp = strtotime( $ver_record->date_verified );
+            $date_verified_display = false !== $timestamp ? date_i18n( get_option( 'date_format' ), $timestamp ) : '';
+        }
+
+        $date_issued_display = '';
+        if ( ! empty( $row->date_issued ) ) {
+            $timestamp = strtotime( $row->date_issued );
+            $date_issued_display = false !== $timestamp ? date_i18n( get_option( 'date_format' ), $timestamp ) : '';
+        }
+
+        $composite = array(
+            'id'                    => $row->id,
+            'cedula_alumno'         => $cedula,
+            'first_name'            => $ver_record ? $ver_record->first_name : '',
+            'last_name'             => $ver_record ? $ver_record->last_name : '',
+            'email'                 => $ver_record ? $ver_record->email : '',
+            'course_name_cert'      => $row->course_name,
+            'course_name_verified'  => $ver_record ? $ver_record->course_name : '',
+            'etapa_del_curso'       => $ver_record ? $ver_record->etapa_del_curso : '',
+            'nombre_empresa'        => $ver_record ? $ver_record->nombre_empresa : '',
+            'nit_empresa'           => $ver_record ? $ver_record->nit_empresa : '',
+            'date_verified'         => $ver_record ? $ver_record->date_verified : '',
+            'date_verified_display' => $date_verified_display,
+            'date_issued'           => $row->date_issued,
+            'date_issued_display'   => $date_issued_display,
+            'validation_id'         => ! empty( $row->validation_id ) ? $row->validation_id : 'N/A',
+            'certificate_filename'  => $row->certificate_filename,
+            'certificate_url'       => $row->certificate_url,
+            'custom_fields'         => array(),
+        );
+
+        if ( ! empty( $custom_labels ) ) {
+            foreach ( $custom_labels as $slug => $label ) {
+                $composite['custom_fields'][ $slug ] = '';
+                if ( $ver_record && isset( $ver_record->custom_fields[ $slug ] ) ) {
+                    $composite['custom_fields'][ $slug ] = $ver_record->custom_fields[ $slug ];
+                }
+            }
+        }
+
+        $results[] = $composite;
+    }
+
+    // Filter by NIT when requested (requires verification data).
+    if ( ! empty( $filters['nit'] ) ) {
+        $results = array_values( array_filter( $results, function( $row ) use ( $filters ) {
+            return isset( $row['nit_empresa'] ) && $filters['nit'] === $row['nit_empresa'];
+        } ) );
+    }
+
+    // Filter by course name match (either certificate or verification course).
+    if ( ! empty( $filters['course'] ) ) {
+        $course_filter = mb_strtolower( $filters['course'] );
+        $results       = array_values( array_filter( $results, function( $row ) use ( $course_filter ) {
+            $cert_course = mb_strtolower( $row['course_name_cert'] );
+            $ver_course  = mb_strtolower( $row['course_name_verified'] );
+            return false !== strpos( $cert_course, $course_filter ) || false !== strpos( $ver_course, $course_filter );
+        } ) );
+    }
+
+    return $results;
 }
 
 /**
