@@ -1217,15 +1217,18 @@ function gcp_get_certificate_html_template($data) {
     }
     .content { position: relative; z-index: 1; }
     .header-grid {
-      display: grid;
-      grid-template-columns: 165px 1fr;
-      align-items: center;
-      column-gap: 10px;
-      margin-bottom: 10px;
+      display: flex;
+      width: 100%;
+      flex-wrap: nowrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
     }
-    .logo img { width: 150px; height: auto; display: block; }
-    .nit { margin-top: 3px; font-weight: 700; font-size: 9pt; letter-spacing: 0.2px; }
-    .header-meta { text-align: right; color: #0b0b0b; padding-top: 2px; line-height: 1.18; }
+    .logo { flex: 0 0 145px; }
+    .logo img { width: 135px; height: auto; display: block; }
+    .nit { margin-top: 2px; font-weight: 700; font-size: 8.8pt; letter-spacing: 0.2px; }
+    .header-meta { flex: 1 1 auto; min-width: 0; text-align: right; color: #0b0b0b; padding-top: 0; line-height: 1.16; }
     .header-meta .title-sub { font-size: 12pt; font-weight: 800; letter-spacing: 0.2px; text-transform: uppercase; }
     .header-meta .radicado { margin-top: 3px; font-weight: 700; font-size: 9.6pt; letter-spacing: 0.2px; }
     .cert-label { font-size: 10.5pt; font-weight: 700; margin: 4px 0 2px; }
