@@ -1181,7 +1181,7 @@ function gcp_get_certificate_html_template($data) {
     $fecha_inicio_curso = !empty($data['fecha_de_inicio']) ? htmlspecialchars($data['fecha_de_inicio'], ENT_QUOTES, 'UTF-8') : '[FECHA INICIO PENDIENTE]';
 
 
-    // HTML y CSS del certificado (diseño modernizado)
+    // HTML y CSS del certificado (diseño alineado a maqueta)
     $html = <<<HTML
 <!DOCTYPE html>
 <html lang="es">
@@ -1192,176 +1192,167 @@ function gcp_get_certificate_html_template($data) {
     * { margin:0; padding:0; box-sizing:border-box; }
     body {
       font-family: 'DejaVu Sans', sans-serif;
-      color: #1f1f1f;
-      background: #f7f7f7 url('{$background_url}') center/cover no-repeat;
+      color: #0b0b0b;
+      background: #d8d8d8;
       line-height:1.45;
       font-size:11pt;
+      padding: 10px;
     }
     .certificate {
-      max-width: 900px;
+      position: relative;
+      max-width: 1040px;
+      min-height: 720px;
       margin: 0 auto;
-      padding: 18mm 18mm 14mm;
-      background: rgba(255,255,255,0.92);
-      border-radius: 12px;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+      padding: 18mm 20mm 16mm;
+      background: #d6d6d6 url('{$background_url}') center/cover no-repeat;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+      overflow: hidden;
     }
+    .certificate::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255,255,255,0.86) 0%, rgba(255,255,255,0.78) 42%, rgba(255,255,255,0.72) 100%);
+      pointer-events: none;
+    }
+    .content { position: relative; z-index: 1; }
     .header-grid {
       display: grid;
-      grid-template-columns: 200px 1fr;
-      align-items: center;
+      grid-template-columns: 240px 1fr;
+      align-items: start;
       column-gap: 16px;
-      margin-bottom: 8px;
-      padding-bottom: 10px;
-      border-bottom: 3px solid #d6dce5;
+      margin-bottom: 16px;
     }
-    .logo img {
-      width: 190px;
-      height: auto;
-      display: block;
-    }
-    .header-meta {
-      text-align: right;
-      color: #334155;
-    }
-    .header-meta h1 {
-      font-size: 16pt;
-      line-height: 1.3;
-      letter-spacing: 0.25px;
-      text-transform: uppercase;
-    }
-    .header-meta small {
-      display:block;
-      margin-top: 4px;
-      font-size: 9pt;
-      color: #475569;
-    }
-    .badge {
-      display: inline-block;
-      background: #f1f5f9;
-      color: #0f172a;
-      padding: 6px 10px;
+    .logo img { width: 230px; height: auto; display: block; }
+    .nit { margin-top: 6px; font-weight: 700; font-size: 10pt; letter-spacing: 0.3px; }
+    .header-meta { text-align: center; color: #0b0b0b; }
+    .header-meta .title-main { font-size: 16pt; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; margin-bottom: 2px; }
+    .header-meta .title-sub { font-size: 14pt; font-weight: 800; letter-spacing: 0.3px; text-transform: uppercase; line-height:1.25; }
+    .header-meta .radicado { margin-top: 6px; font-weight: 600; font-size: 10.5pt; letter-spacing: 0.2px; }
+    .cert-label { font-size: 11pt; font-weight: 700; margin: 6px 0 4px; }
+    .field {
+      width: 100%;
+      background: linear-gradient(180deg, #ededed 0%, #e2e2e2 100%);
+      border: 1px solid #bfc3c8;
       border-radius: 6px;
-      font-weight: 600;
-      font-size: 10pt;
-      margin-top: 2px;
-      border: 1px solid #e2e8f0;
-    }
-    .highlight {
-      font-size: 17pt;
-      color: #0b1328;
+      padding: 9px 12px;
+      font-size: 14pt;
       font-weight: 700;
-      margin: 2px 0 10px;
-    }
-    .course-name {
-      background: linear-gradient(120deg, #f1f5f9 0%, #e2e8f0 100%);
-      padding: 12px;
-      border-radius: 10px;
-      border: 1px solid #dce3eb;
-      font-size: 15pt;
+      color: #0b0b0b;
       margin-bottom: 10px;
     }
-    .info-grid {
-      margin: 6px 0 14px;
-      border:1px solid #e5e7eb;
-      border-radius:10px;
-      overflow:hidden;
-      background:#fafafa;
-    }
-    .info-grid .row {
-      display:grid;
+    .course-field { font-size: 15pt; }
+    .detail-row {
+      display: grid;
       grid-template-columns: 32% 68%;
-      padding: 10px 12px;
-      border-bottom:1px solid #e5e7eb;
-      align-items: start;
+      margin-bottom: 6px;
+      overflow: hidden;
+      border: 1px solid #c5c7cb;
+      border-radius: 6px;
+      background: linear-gradient(180deg, #f2f2f2 0%, #e6e6e6 100%);
     }
-    .info-grid .row:last-child { border-bottom:0; }
-    .info-grid .label { font-weight:600; color:#1f2937; font-size:10pt; }
-    .info-grid .value { color:#111827; font-size:10.5pt; }
-    .validation-box {
-      margin: 12px 0;
-      padding: 12px;
-      border-radius: 10px;
-      background: #0b1328;
-      color: #f8fafc;
-      text-align: center;
-      letter-spacing: 0.6px;
+    .detail-label {
+      background: linear-gradient(180deg, #d7d7d7 0%, #c9c9c9 100%);
+      padding: 9px 10px;
       font-weight: 700;
-      font-size: 11.5pt;
+      font-size: 10.5pt;
+      border-right: 1px solid #bfc3c8;
+      display: flex;
+      align-items: center;
+    }
+    .detail-value {
+      padding: 9px 12px;
+      font-size: 11pt;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      color: #0f0f0f;
+    }
+    .validation-box {
+      margin: 14px auto 10px;
+      padding: 12px 14px;
+      width: fit-content;
+      border: 1px solid #000;
+      border-radius: 8px;
+      background: #b10c10;
+      color: #fff;
+      font-size: 12pt;
+      font-weight: 800;
+      letter-spacing: 0.8px;
     }
     .signatures {
       display:grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 20px;
-      margin-top: 18px;
+      gap: 26px;
+      margin-top: 22px;
     }
-    .signature {
-      text-align:center;
-      padding-top: 12px;
-    }
+    .signature { text-align:center; }
     .signature .line {
-      margin: 0 auto 6px;
-      border-top: 1.5px solid #475569;
-      width: 80%;
-      height: 18px;
+      margin: 0 auto 8px;
+      border-top: 1.6px solid #1a1a1a;
+      width: 78%;
+      height: 22px;
     }
-    .signature p { margin: 0; font-size: 10pt; color:#111827; line-height:1.35; }
+    .signature p { margin: 0; font-size: 10pt; color:#0f0f0f; line-height:1.4; font-weight: 700; }
     .footer {
       text-align:center;
-      font-size:8pt;
-      color:#4b5563;
-      margin-top: 20px;
-      line-height:1.4;
+      font-size:8.5pt;
+      color:#0f0f0f;
+      margin-top: 18px;
+      line-height:1.45;
+      font-weight: 600;
     }
-    .footer strong { color:#111827; }
-    .footer a { color:#0f172a; text-decoration:none; font-weight:600; }
+    .footer strong { color:#000; }
+    .footer a { color:#000; text-decoration:none; font-weight:700; }
   </style>
 </head>
 <body>
   <div class="certificate">
-    <div class="header-grid">
-      <div class="logo"><img src="{$logo_url}" alt="Logo HSEQ"></div>
-      <div class="header-meta">
-        <h1>Certificado de formación y entrenamiento<br>para trabajos en alturas</h1>
-        <small>MINTRABAJO N° RADICADO 08SE2018220000000030200<br>NIT: 900.673.522-6</small>
+    <div class="content">
+      <div class="header-grid">
+        <div class="logo">
+          <img src="{$logo_url}" alt="Logo HSEQ">
+          <div class="nit">NIT: 900.673.522-6</div>
+        </div>
+        <div class="header-meta">
+          <div class="title-main">HSEQ DEL GOLFO s.a.s.</div>
+          <div class="title-sub">CERTIFICADO DE FORMACIÓN Y ENTRENAMIENTO</div>
+          <div class="title-sub">PARA TRABAJOS EN ALTURAS</div>
+          <div class="radicado">MINTRABAJO N° RADICADO 08SE2018220000000030200</div>
+        </div>
       </div>
-    </div>
 
-    <div>
-      <div class="badge">Certifica que:</div>
-      <div class="highlight">{$nombre_completo}</div>
-    </div>
+      <div class="cert-label">Certifica que:</div>
+      <div class="field">{$nombre_completo}</div>
 
-    <div>
-      <div class="badge">Curso y aprobó la formación y entrenamiento en:</div>
-      <div class="course-name">{$nombre_curso}</div>
-    </div>
+      <div class="cert-label">Curso y aprobó la formación y entrenamiento en:</div>
+      <div class="field course-field">{$nombre_curso}</div>
 
-    <div class="info-grid">
-      <div class="row"><div class="label">Intensidad</div><div class="value">{$intensidad_horaria} horas, bajo la resolución {$resolucion_mintrabajo}</div></div>
-      <div class="row"><div class="label">Realizado en</div><div class="value">{$ciudad_expedicion} entre el {$fecha_inicio_curso} y el {$fecha_realizado}</div></div>
-      <div class="row"><div class="label">Expedido en</div><div class="value">{$ciudad_expedicion}, el {$fecha_expedicion}</div></div>
-      <div class="row"><div class="label">NIT empresa empleadora</div><div class="value">{$nit_empresa}</div></div>
-      <div class="row"><div class="label">Representante legal empresa empleadora</div><div class="value">{$representante_legal_empleadora}</div></div>
-      <div class="row"><div class="label">ARL</div><div class="value">{$arl}</div></div>
-    </div>
+      <div class="detail-row"><div class="detail-label">Con una intensidad de:</div><div class="detail-value">{$intensidad_horaria} horas, bajo la Resolución {$resolucion_mintrabajo}</div></div>
+      <div class="detail-row"><div class="detail-label">Realizado en la ciudad de:</div><div class="detail-value">{$ciudad_expedicion}, entre el {$fecha_inicio_curso} y el {$fecha_realizado}</div></div>
+      <div class="detail-row"><div class="detail-label">Expedido en la ciudad de:</div><div class="detail-value">{$ciudad_expedicion}, el {$fecha_expedicion}</div></div>
+      <div class="detail-row"><div class="detail-label">Nit de la empresa empleadora</div><div class="detail-value">{$nit_empresa}</div></div>
+      <div class="detail-row"><div class="detail-label">Representante legal de la empresa</div><div class="detail-value">{$representante_legal_empleadora}</div></div>
+      <div class="detail-row"><div class="detail-label">ARL</div><div class="detail-value">{$arl}</div></div>
 
-    <div class="validation-box">NCI - HSEQ - {$codigo_validacion}</div>
+      <div class="validation-box">NCI - HSEQ - {$codigo_validacion}</div>
 
-    <div class="signatures">
-      <div class="signature">
-        <div class="line">{$trainer_signature_html}</div>
-        <p>{$trainer_name}<br>Entrenador trabajo en altura<br>Licencia SST: {$trainer_license}</p>
+      <div class="signatures">
+        <div class="signature">
+          <div class="line">{$trainer_signature_html}</div>
+          <p>{$trainer_name}<br>Entrenador trabajo en altura<br>Licencia SST: {$trainer_license}</p>
+        </div>
+        <div class="signature">
+          <div class="line">&nbsp;</div>
+          <p>{$representante_legal_certificadora}<br>Representante legal</p>
+        </div>
       </div>
-      <div class="signature">
-        <div class="line">&nbsp;</div>
-        <p>{$representante_legal_certificadora}<br>Representante legal</p>
-      </div>
-    </div>
 
-    <div class="footer">
-      <p>{$licencia_sst_hseq}</p>
-      <p>Este diploma puede ser verificado llamando al número <strong>{$telefonos_verificacion}</strong></p>
-      <p>La autenticidad de este documento puede ser verificada en el registro electrónico en <a href="{$url_verificacion_web}" target="_blank">{$web_verificacion_display}</a></p>
+      <div class="footer">
+        <p>{$licencia_sst_hseq}</p>
+        <p>Este diploma puede ser verificado llamando al número <strong>{$telefonos_verificacion}</strong></p>
+        <p>La autenticidad de este documento puede ser verificada en el registro electrónico en <a href="{$url_verificacion_web}" target="_blank">{$web_verificacion_display}</a></p>
+      </div>
     </div>
   </div>
 </body>
