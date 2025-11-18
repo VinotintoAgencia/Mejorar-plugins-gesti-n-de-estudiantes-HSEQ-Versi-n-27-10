@@ -15,6 +15,8 @@ jQuery(function($) {
   const AJAX_URL = typeof ajaxurl !== 'undefined'
     ? ajaxurl
     : (ajaxStrings.ajaxurl || '');
+  const VIEW_MORE_LABEL = ajaxStrings.viewMoreText || 'Ver más';
+  const VIEW_LESS_LABEL = ajaxStrings.viewLessText || 'Ver menos';
   const SPINNER_CLASS = 'gcp-spinner';
   const SLUGS = [
     'nombre_del_curso', 'nombre_de_la_empresa_empl', 'nit_de_la_empresa_emplead',
@@ -237,6 +239,23 @@ jQuery(function($) {
       showNotice($noticeTarget, [fallback], false);
     });
   });
+
+  // 4) Mostrar/ocultar detalles en la tabla de certificados
+  const $certTable = $('#gcp-certificates-table');
+  if ($certTable.length) {
+    $certTable.on('click', '.gcp-toggle-cert-details', function(e) {
+      e.preventDefault();
+      const $btn = $(this);
+      const $row = $btn.closest('tr');
+      const $detailsRow = $row.next('.gcp-cert-details-row');
+      if (!$detailsRow.length) return;
+
+      const isOpen = $detailsRow.hasClass('is-open');
+      $detailsRow.toggleClass('is-open', !isOpen);
+      $btn.attr('aria-expanded', isOpen ? 'false' : 'true');
+      $btn.text(isOpen ? VIEW_MORE_LABEL : VIEW_LESS_LABEL);
+    });
+  }
 
   // 4) Generar PDF real
   $('#gcp-generate-real-pdf-button').on('click', function() {

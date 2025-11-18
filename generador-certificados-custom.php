@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Generador de Certificados Personalizado
  * Description: Permite generar certificados buscando contactos en FluentCRM y utilizando su API REST, y que los alumnos descarguen sus certificados.
- * Version: 1.5.1
+ * Version: 1.5.2
  * Author: <a href="https://www.vinotintoagencia.com">Vinotinto Agencia</a>
  * Text Domain: gcp-generador-cert
  * License: GPLv2 or later
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! defined( 'GCP_PLUGIN_VERSION' ) ) {
-    define( 'GCP_PLUGIN_VERSION', '1.5.1' );
+    define( 'GCP_PLUGIN_VERSION', '1.5.2' );
 }
 
 // Importar la clase Subscriber de FluentCRM
@@ -620,7 +620,9 @@ function gcp_enqueue_admin_scripts( $hook_suffix ) {
             'verificationSuccess'       => __( 'Verificación Exitosa', 'gcp-generador-cert' ),
             'verificationError'         => __( 'Error al registrar.', 'gcp-generador-cert' ),
             'verificationCommError'     => __( 'Error de comunicación al registrar.', 'gcp-generador-cert' ),
-            'verificationMissingCedula' => __( 'Por favor, ingresa una cédula.', 'gcp-generador-cert' )
+            'verificationMissingCedula' => __( 'Por favor, ingresa una cédula.', 'gcp-generador-cert' ),
+            'viewMoreText'              => __( 'Ver más', 'gcp-generador-cert' ),
+            'viewLessText'              => __( 'Ver menos', 'gcp-generador-cert' ),
         )
     );
     // Estilos del formulario en la página de administración
@@ -2393,6 +2395,7 @@ function gcp_render_administrar_certificados_page() {
     );
 
     $custom_field_labels = gcp_get_all_fluentcrm_custom_field_labels();
+    $cert_table_colspan  = 9; // Columnas visibles en la fila principal
     ?>
     <div class="wrap">
         <h1><?php _e( 'Administrar Certificados Emitidos', 'gcp-generador-cert' ); ?></h1>
@@ -2421,44 +2424,42 @@ function gcp_render_administrar_certificados_page() {
             </p>
         </form>
 
-        <table class="wp-list-table widefat fixed striped">
+        <table id="gcp-certificates-table" class="wp-list-table widefat fixed striped gcp-certificates-table">
             <thead>
                 <tr>
                     <th scope="col"><?php _e( 'Cédula Alumno', 'gcp-generador-cert' ); ?></th>
                     <th scope="col"><?php _e( 'Nombre', 'gcp-generador-cert' ); ?></th>
-                    <th scope="col"><?php _e( 'Apellido', 'gcp-generador-cert' ); ?></th>
                     <th scope="col"><?php _e( 'Email', 'gcp-generador-cert' ); ?></th>
                     <th scope="col"><?php _e( 'Curso (Cert.)', 'gcp-generador-cert' ); ?></th>
-                    <th scope="col"><?php _e( 'Curso (Registro)', 'gcp-generador-cert' ); ?></th>
-                    <th scope="col"><?php _e( 'Etapa del curso', 'gcp-generador-cert' ); ?></th>
-                    <th scope="col"><?php _e( 'Nombre Empresa', 'gcp-generador-cert' ); ?></th>
-                    <th scope="col"><?php _e( 'NIT Empresa', 'gcp-generador-cert' ); ?></th>
-                    <th scope="col"><?php _e( 'Fecha Inscripción', 'gcp-generador-cert' ); ?></th>
                     <th scope="col"><?php _e( 'Fecha Emisión', 'gcp-generador-cert' ); ?></th>
                     <th scope="col"><?php _e( 'ID Validación', 'gcp-generador-cert' ); ?></th>
                     <th scope="col"><?php _e( 'Archivo', 'gcp-generador-cert' ); ?></th>
-                    <?php if ( ! empty( $custom_field_labels ) ) : ?>
-                        <?php foreach ( $custom_field_labels as $label ) : ?>
-                            <th scope="col"><?php echo esc_html( $label ); ?></th>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                    <th scope="col"><?php _e( 'Detalles', 'gcp-generador-cert' ); ?></th>
                     <th scope="col"><?php _e( 'Acciones', 'gcp-generador-cert' ); ?></th>
                 </tr>
             </thead>
             <tbody>
                 <?php if ( ! empty( $certificates ) ) : ?>
                     <?php foreach ( $certificates as $cert ) : ?>
+                        <?php
+                        $full_name        = trim( $cert['first_name'] . ' ' . $cert['last_name'] );
+                        $course_registro  = ! empty( $cert['course_name_verified'] ) ? $cert['course_name_verified'] : __( 'Sin registro', 'gcp-generador-cert' );
+                        $company_name     = ! empty( $cert['nombre_empresa'] ) ? $cert['nombre_empresa'] : __( 'No informado', 'gcp-generador-cert' );
+                        $custom_field_map = array();
+
+                        if ( ! empty( $custom_field_labels ) ) {
+                            foreach ( $custom_field_labels as $slug => $label ) {
+                                if ( isset( $cert['custom_fields'][ $slug ] ) && '' !== $cert['custom_fields'][ $slug ] ) {
+                                    $custom_field_map[ $label ] = $cert['custom_fields'][ $slug ];
+                                }
+                            }
+                        }
+                        ?>
                         <tr>
                             <td><?php echo esc_html( $cert['cedula_alumno'] ); ?></td>
-                            <td><?php echo esc_html( $cert['first_name'] ); ?></td>
-                            <td><?php echo esc_html( $cert['last_name'] ); ?></td>
+                            <td><?php echo esc_html( $full_name ); ?></td>
                             <td><?php echo esc_html( $cert['email'] ); ?></td>
                             <td><?php echo esc_html( $cert['course_name_cert'] ); ?></td>
-                            <td><?php echo esc_html( $cert['course_name_verified'] ); ?></td>
-                            <td><?php echo esc_html( $cert['etapa_del_curso'] ); ?></td>
-                            <td><?php echo esc_html( $cert['nombre_empresa'] ); ?></td>
-                            <td><?php echo esc_html( $cert['nit_empresa'] ); ?></td>
-                            <td><?php echo esc_html( $cert['date_verified_display'] ); ?></td>
                             <td><?php echo esc_html( $cert['date_issued_display'] ); ?></td>
                             <td><?php echo esc_html( $cert['validation_id'] ); ?></td>
                             <td>
@@ -2470,11 +2471,11 @@ function gcp_render_administrar_certificados_page() {
                                     <?php _e( 'No disponible', 'gcp-generador-cert' ); ?>
                                 <?php endif; ?>
                             </td>
-                            <?php if ( ! empty( $custom_field_labels ) ) : ?>
-                                <?php foreach ( $custom_field_labels as $slug => $label ) : ?>
-                                    <td><?php echo isset( $cert['custom_fields'][ $slug ] ) ? esc_html( $cert['custom_fields'][ $slug ] ) : ''; ?></td>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
+                            <td>
+                                <button type="button" class="button button-secondary gcp-toggle-cert-details" aria-expanded="false">
+                                    <?php _e( 'Ver más', 'gcp-generador-cert' ); ?>
+                                </button>
+                            </td>
                             <td>
                                 <?php
                                 $delete_link = add_query_arg( array(
@@ -2486,6 +2487,75 @@ function gcp_render_administrar_certificados_page() {
                                 <a href="<?php echo esc_url( $delete_link ); ?>"
                                    onclick="return confirm('<?php esc_attr_e( '¿Estás seguro de que deseas eliminar este certificado? Esta acción no se puede deshacer.', 'gcp-generador-cert' ); ?>');"
                                    style="color: #a00;"><?php _e( 'Eliminar', 'gcp-generador-cert' ); ?></a>
+                            </td>
+                        </tr>
+                        <tr class="gcp-cert-details-row">
+                            <td colspan="<?php echo intval( $cert_table_colspan ); ?>">
+                                <div class="gcp-cert-details">
+                                    <div class="gcp-cert-details__header">
+                                        <strong><?php echo esc_html( $full_name ); ?></strong>
+                                        <span class="gcp-cert-details__summary">
+                                            <?php printf(
+                                                /* translators: 1: course from verification, 2: company name */
+                                                __( 'Curso registrado: %1$s · Empresa: %2$s', 'gcp-generador-cert' ),
+                                                esc_html( $course_registro ),
+                                                esc_html( $company_name )
+                                            ); ?>
+                                        </span>
+                                    </div>
+                                    <div class="gcp-cert-details__grid">
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'Nombre', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['first_name'] ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'Apellido', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['last_name'] ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'Curso (Registro)', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $course_registro ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'Etapa del curso', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['etapa_del_curso'] ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'Nombre Empresa', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['nombre_empresa'] ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'NIT Empresa', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['nit_empresa'] ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'Fecha Inscripción', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['date_verified_display'] ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'Fecha Emisión', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['date_issued_display'] ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'ID Validación', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['validation_id'] ); ?></span>
+                                        </div>
+                                    </div>
+
+                                    <?php if ( ! empty( $custom_field_map ) ) : ?>
+                                        <div class="gcp-cert-details__custom">
+                                            <h4><?php _e( 'Campos personalizados', 'gcp-generador-cert' ); ?></h4>
+                                            <div class="gcp-cert-details__grid">
+                                                <?php foreach ( $custom_field_map as $label => $value ) : ?>
+                                                    <div class="gcp-cert-details__item">
+                                                        <span class="gcp-cert-details__label"><?php echo esc_html( $label ); ?></span>
+                                                        <span class="gcp-cert-details__value"><?php echo esc_html( $value ); ?></span>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>
