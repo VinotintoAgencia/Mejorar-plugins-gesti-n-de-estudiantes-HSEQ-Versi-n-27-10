@@ -1372,6 +1372,12 @@ function gcp_get_certificate_html_template($data) {
     $ciudad_expedicion = $tokens['ciudad_expedicion'];
     $resolucion_mintrabajo = $tokens['resolucion_mintrabajo'];
 
+    $default_background = plugin_dir_url( __FILE__ ) . 'assets/images/background-certificado.svg';
+    $has_custom_background = $background_url && $background_url !== $default_background;
+    $overlay_gradient = $has_custom_background
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.36) 42%, rgba(255,255,255,0.3) 100%)'
+        : 'linear-gradient(180deg, rgba(255,255,255,0.86) 0%, rgba(255,255,255,0.78) 42%, rgba(255,255,255,0.72) 100%)';
+
 
     // HTML y CSS del certificado (diseño alineado a maqueta)
     $html = <<<HTML
@@ -1404,7 +1410,7 @@ function gcp_get_certificate_html_template($data) {
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(180deg, rgba(255,255,255,0.86) 0%, rgba(255,255,255,0.78) 42%, rgba(255,255,255,0.72) 100%);
+      background: {$overlay_gradient};
       pointer-events: none;
     }
     .content { position: relative; z-index: 1; }
@@ -1695,6 +1701,7 @@ function gcp_render_personalizar_certificado_page() {
                         <td>
                             <input type="url" id="gcp_background_url" name="gcp_background_url" class="regular-text" value="<?php echo esc_attr( $saved_bg_url ); ?>" placeholder="https://tusitio.com/wp-content/uploads/fondo-certificado.png">
                             <p class="description"><?php esc_html_e( 'Pega la URL de una imagen PNG o JPG de tu biblioteca de medios. Déjalo vacío para usar el fondo predeterminado.', 'gcp-generador-cert' ); ?></p>
+                            <p class="description"><?php esc_html_e( 'Sugerencia: usa imágenes verticales (A4) de al menos 1200 px de ancho, colores suaves y sin transparencias extremas para que el fondo se vea completo tras el filtro de lectura del texto.', 'gcp-generador-cert' ); ?></p>
                         </td>
                     </tr>
                 </tbody>
