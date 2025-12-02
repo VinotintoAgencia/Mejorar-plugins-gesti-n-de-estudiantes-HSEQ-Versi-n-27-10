@@ -1008,6 +1008,25 @@ function gcp_handle_pdf_generation_request() {
         }
 
         $mpdf = new \Mpdf\Mpdf($mpdf_config);
+
+        $background_for_pdf = gcp_resolve_background_for_css( gcp_get_certificate_background_url() );
+        $is_data_uri        = 0 === strpos( $background_for_pdf, 'data:image/' );
+        $is_png_or_jpg      = false;
+
+        if ( $is_data_uri ) {
+            $is_png_or_jpg = 0 === strpos( $background_for_pdf, 'data:image/png' ) || 0 === strpos( $background_for_pdf, 'data:image/jpeg' );
+        } else {
+            $path          = $background_for_pdf ? parse_url( $background_for_pdf, PHP_URL_PATH ) : '';
+            $is_png_or_jpg = (bool) ( $path && preg_match( '/\.(png|jpe?g)$/i', $path ) );
+        }
+
+        if ( $background_for_pdf && $is_png_or_jpg ) {
+            $mpdf->SetDefaultBodyCSS( 'background-image', "url('{$background_for_pdf}')" );
+            $mpdf->SetDefaultBodyCSS( 'background-image-resize', 6 );
+            $mpdf->SetDefaultBodyCSS( 'background-repeat', 'no-repeat' );
+            $mpdf->SetDefaultBodyCSS( 'background-position', 'center top' );
+        }
+
         $mpdf->SetDisplayMode('fullpage');
         $mpdf->WriteHTML($certificate_html);
 
@@ -1563,7 +1582,7 @@ function gcp_get_default_certificate_custom_styles() {
   background-image: url("[background_url_resolved]");
   background-repeat: no-repeat;
   background-position: left center;
-  background-size: contain;
+  background-size: 100% auto;
   opacity: 0.90;
   pointer-events: none;
   z-index: 0;
@@ -2223,9 +2242,10 @@ function gcp_render_personalizar_certificado_page() {
             <div class="gcp-customizer-card">
                 <h3><?php esc_html_e( 'Atajo para el fondo en tu HTML', 'gcp-generador-cert' ); ?></h3>
                 <p class="description"><?php esc_html_e( 'Inserta el shortcode resuelto en tu CSS para que el fondo se pinte también en el PDF.', 'gcp-generador-cert' ); ?></p>
+                <p class="description"><?php esc_html_e( 'mPDF recomienda usar background-image-resize=6; evita cover y usa proporción completa (100% auto).', 'gcp-generador-cert' ); ?></p>
                 <pre class="gcp-code-block">.cert-wrapper::before {
   background-image: url('[background_url_resolved]');
-  background-size: cover;
+  background-size: 100% auto; /* mPDF: usa resize 6 */
 }</pre>
                 <p class="description"><?php esc_html_e( 'Si prefieres la URL sin procesar, usa [background_url].', 'gcp-generador-cert' ); ?></p>
             </div>
