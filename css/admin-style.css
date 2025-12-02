@@ -216,6 +216,55 @@
   color: #92400e;
 }
 
+.gcp-bg-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #e4e7ef;
+  background: #f8fafc;
+  margin: 0 0 18px;
+}
+
+.gcp-bg-status .dashicons {
+  font-size: 20px;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+.gcp-bg-status__text {
+  line-height: 1.5;
+}
+
+.gcp-bg-status__list {
+  margin: 6px 0 0 18px;
+  padding: 0;
+  list-style: disc;
+}
+
+.gcp-bg-status__list li {
+  margin-bottom: 6px;
+}
+
+.gcp-bg-ok {
+  border-color: #c7f0d2;
+  background: #f0fdf4;
+}
+
+.gcp-bg-ok .dashicons {
+  color: #166534;
+}
+
+.gcp-bg-warning {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
+.gcp-bg-warning .dashicons {
+  color: #92400e;
+}
+
 .gcp-shortcode-list {
   margin: 12px 0 0 18px;
   padding: 0;

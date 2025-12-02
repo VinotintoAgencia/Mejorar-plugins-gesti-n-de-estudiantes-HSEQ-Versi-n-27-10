@@ -1199,6 +1199,83 @@ function gcp_get_certificate_background_url() {
 }
 
 /**
+ * Provide detailed diagnostics about the configured background to help
+ * administrators troubleshoot when the image is not appearing in the PDF.
+ *
+ * @return array
+ */
+function gcp_get_certificate_background_diagnostics() {
+    $default = 'https://srv1847-files.hstgr.io/4f7ec8ad3cb7ea09/files/public_html/wp-content/plugins/generador-certificados-custom/assets/images/Dise%C3%B1o%20sin%20t%C3%ADtulo%20(10).jpg';
+    $custom  = trim( (string) get_option( 'gcp_certificate_background_url', '' ) );
+
+    $selected = $custom ? $custom : $default;
+    $is_data  = 0 === strpos( $selected, 'data:image/' );
+
+    $filetype = $is_data
+        ? array( 'ext' => 'data', 'type' => 'inline' )
+        : wp_check_filetype( $selected, array(
+            'png'  => 'image/png',
+            'jpg'  => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'svg'  => 'image/svg+xml',
+        ) );
+
+    $resolved          = gcp_resolve_background_for_css( $selected );
+    $resolved_is_data  = 0 === strpos( $resolved, 'data:image/' );
+    $allow_url_fopen   = ini_get( 'allow_url_fopen' );
+    $http_status       = '';
+    $http_error        = '';
+    $content_type_head = '';
+
+    if ( ! $is_data && 0 === strpos( $selected, 'http' ) ) {
+        $head = wp_remote_head( $selected, array( 'timeout' => 5 ) );
+        if ( is_wp_error( $head ) ) {
+            $http_error = $head->get_error_message();
+        } else {
+            $http_status       = wp_remote_retrieve_response_code( $head );
+            $content_type_head = wp_remote_retrieve_header( $head, 'content-type' );
+        }
+    }
+
+    $notes = array();
+    if ( ! $custom ) {
+        $notes[] = __( 'Se está usando el fondo predeterminado porque no hay una URL guardada.', 'gcp-generador-cert' );
+    }
+    if ( empty( $filetype['ext'] ) || ! in_array( $filetype['ext'], array( 'png', 'jpg', 'jpeg', 'data' ), true ) ) {
+        $notes[] = __( 'mPDF solo admite JPG o PNG como fondo. Verifica la extensión.', 'gcp-generador-cert' );
+    }
+    if ( $content_type_head && ! in_array( $content_type_head, array( 'image/png', 'image/jpeg' ), true ) ) {
+        $notes[] = sprintf( __( 'El servidor devolvió Content-Type: %s (debe ser image/png o image/jpeg).', 'gcp-generador-cert' ), esc_html( $content_type_head ) );
+    }
+    if ( $http_error ) {
+        $notes[] = sprintf( __( 'No se pudo acceder a la imagen: %s', 'gcp-generador-cert' ), esc_html( $http_error ) );
+    }
+    if ( $http_status && $http_status >= 400 ) {
+        $notes[] = sprintf( __( 'El servidor respondió con el código HTTP: %s.', 'gcp-generador-cert' ), esc_html( $http_status ) );
+    }
+    if ( ! $allow_url_fopen ) {
+        $notes[] = __( 'El servidor tiene allow_url_fopen desactivado; podría bloquear la descarga remota de la imagen.', 'gcp-generador-cert' );
+    }
+    if ( ! $resolved ) {
+        $notes[] = __( 'No se pudo resolver el fondo para el CSS/ PDF (la URL podría no ser accesible).', 'gcp-generador-cert' );
+    }
+
+    return array(
+        'selected'            => $selected,
+        'resolved'            => $resolved,
+        'using_default'       => ! $custom,
+        'filetype'            => $filetype,
+        'resolved_is_data'    => $resolved_is_data,
+        'allow_url_fopen'     => (bool) $allow_url_fopen,
+        'http_status'         => $http_status,
+        'http_error'          => $http_error,
+        'content_type_head'   => $content_type_head,
+        'notes'               => $notes,
+        'ok_for_mpdf'         => $resolved && ( $resolved_is_data || in_array( $filetype['ext'], array( 'png', 'jpg', 'jpeg' ), true ) ),
+    );
+}
+
+/**
  * Fetch a remote image and return a data URI so mPDF can always render it,
  * even if remote fetching is restricted on the server.
  *
@@ -2113,6 +2190,9 @@ function gcp_render_personalizar_certificado_page() {
         )
         : __( 'mPDF no está disponible. Asegúrate de tener la carpeta vendor con mpdf/mpdf antes de generar certificados.', 'gcp-generador-cert' );
 
+    $bg_diag = gcp_get_certificate_background_diagnostics();
+    $bg_ok   = $bg_diag['ok_for_mpdf'];
+
     $notice = '';
     $error  = '';
     $imported_from_file = '';
@@ -2204,6 +2284,35 @@ function gcp_render_personalizar_certificado_page() {
                 <?php else : ?>
                     <span class="description"><?php esc_html_e( 'Si cambias el diseño, el PDF usará mPDF para respetar tu HTML, CSS y fondo personalizado.', 'gcp-generador-cert' ); ?></span>
                 <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="gcp-bg-status <?php echo $bg_ok ? 'gcp-bg-ok' : 'gcp-bg-warning'; ?>">
+            <span class="dashicons <?php echo $bg_ok ? 'dashicons-format-image' : 'dashicons-warning'; ?>" aria-hidden="true"></span>
+            <div class="gcp-bg-status__text">
+                <strong><?php esc_html_e( 'Estado del fondo del certificado', 'gcp-generador-cert' ); ?></strong>
+                <ul class="gcp-bg-status__list">
+                    <li><?php esc_html_e( 'URL seleccionada:', 'gcp-generador-cert' ); ?> <code><?php echo esc_html( $bg_diag['selected'] ); ?></code></li>
+                    <li><?php esc_html_e( 'URL resuelta para el PDF:', 'gcp-generador-cert' ); ?> <code><?php echo $bg_diag['resolved'] ? esc_html( substr( $bg_diag['resolved'], 0, 120 ) . ( strlen( $bg_diag['resolved'] ) > 120 ? '…' : '' ) ) : __( 'No disponible', 'gcp-generador-cert' ); ?></code></li>
+                    <li><?php esc_html_e( 'Tipo detectado:', 'gcp-generador-cert' ); ?> <?php echo esc_html( $bg_diag['filetype']['ext'] ? strtoupper( $bg_diag['filetype']['ext'] ) : __( 'desconocido', 'gcp-generador-cert' ) ); ?></li>
+                    <?php if ( $bg_diag['http_status'] ) : ?>
+                        <li><?php esc_html_e( 'Código HTTP al intentar leer la imagen:', 'gcp-generador-cert' ); ?> <?php echo esc_html( $bg_diag['http_status'] ); ?></li>
+                    <?php endif; ?>
+                    <?php if ( $bg_diag['content_type_head'] ) : ?>
+                        <li><?php esc_html_e( 'Content-Type reportado:', 'gcp-generador-cert' ); ?> <?php echo esc_html( $bg_diag['content_type_head'] ); ?></li>
+                    <?php endif; ?>
+                    <?php if ( $bg_diag['http_error'] ) : ?>
+                        <li><?php esc_html_e( 'Error al consultar la imagen:', 'gcp-generador-cert' ); ?> <?php echo esc_html( $bg_diag['http_error'] ); ?></li>
+                    <?php endif; ?>
+                    <?php if ( $bg_diag['resolved_is_data'] ) : ?>
+                        <li><?php esc_html_e( 'La imagen fue incrustada como data URI para mejorar la compatibilidad de mPDF.', 'gcp-generador-cert' ); ?></li>
+                    <?php endif; ?>
+                    <?php if ( ! empty( $bg_diag['notes'] ) ) : ?>
+                        <?php foreach ( $bg_diag['notes'] as $note ) : ?>
+                            <li><?php echo wp_kses_post( $note ); ?></li>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </ul>
             </div>
         </div>
 
