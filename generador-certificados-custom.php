@@ -1445,7 +1445,7 @@ function gcp_get_default_certificate_custom_template() {
       </div>
 
       <div style="font-size:20px; font-family:'Times New Roman', serif; margin-bottom:10px;">
-        Curso y aprobó la formación y entrenamiento en:
+        Cursó y aprobó la formación y entrenamiento en:
       </div>
 
       <div class="shade-pill" style="font-size:20px; line-height:1.3;">
@@ -1499,6 +1499,7 @@ function gcp_get_default_certificate_custom_template() {
       <tr>
         <!-- Firma Representante Legal (IZQUIERDA) -->
         <td class="td-half" style="text-align: left;">
+          <div style="height: 64px;"></div>
           <span class="cert-sign-line">Mónica Marcela Cañas Gomez</span><br>
           <span>Representante Legal</span>
         </td>
@@ -1561,75 +1562,104 @@ HTML;
  */
 function gcp_get_default_certificate_custom_styles() {
     return <<<CSS
-/* Contenedor general del certificado */
-.cert-wrapper {
-  max-width: 900px;
-  margin: 0 auto;
-  background: #ffffff;
-  box-shadow: 0 0 14px rgba(0,0,0,0.12);
-  padding: 30px 40px 28px;
-  position: relative;
-  overflow: hidden;
-  font-family: Arial, sans-serif;
-  font-size: 14px;
+/* =========================================
+   1. VARIABLES Y CONFIGURACIÓN GLOBAL
+   ========================================= */
+:root {
+  --cert-font-main: Arial, "Helvetica Neue", Helvetica, sans-serif;
+  --cert-font-serif: "Times New Roman", Times, serif;
+  --cert-bg-base: #ffffff;      /* Color base del papel */
+  --cert-shade-bg: #e8e8e8;     /* Fondo de las cajitas grises */
+  --cert-shade-border: #d6d6d6; /* Borde de las cajitas */
+  --cert-highlight: #a30000;    /* Rojo para textos destacados */
+  --cert-text-color: #000000;
 }
 
-/* Fondo personalizado */
+/* =========================================
+   2. CONTENEDOR PRINCIPAL (El papel)
+   ========================================= */
+.cert-wrapper {
+  position: relative; /* Necesario para ubicar el fondo */
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 30px 40px 28px;
+  background-color: var(--cert-bg-base);
+  box-shadow: 0 0 14px rgba(0,0,0,0.12);
+  overflow: hidden;
+  font-family: var(--cert-font-main);
+  font-size: 14px;
+  color: var(--cert-text-color);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  page-break-inside: avoid;
+}
+
+/* =========================================
+   3. IMAGEN DE FONDO (Capa 0)
+   ========================================= */
 .cert-wrapper::before {
   content: "";
   position: absolute;
   inset: 0;
-  background-image: url("[background_url_resolved]");
+  background-image: url('[background_url_resolved]');
   background-repeat: no-repeat;
-  background-position: left center;
+  background-position: center center;
   background-size: 100% auto;
-  opacity: 0.90;
-  pointer-events: none;
   z-index: 0;
+  opacity: 1;
+  pointer-events: none;
 }
 
+/* =========================================
+   4. CONTENIDO DEL CERTIFICADO (Capa 1)
+   ========================================= */
 .cert-content {
   position: relative;
   z-index: 1;
 }
 
-/* Cajas sombreadas */
+/* =========================================
+   5. COMPONENTES: CAJAS GRISES
+   ========================================= */
 .shade-box {
   display: inline-block;
-  padding: 6px 12px;
-  background: #e8e8e8;
-  border: 1px solid #d6d6d6;
-  border-radius: 10px;
   min-width: 160px;
+  padding: 6px 12px;
   margin-left: 4px;
+  background: var(--cert-shade-bg);
+  border: 1px solid var(--cert-shade-border);
+  border-radius: 10px;
+  vertical-align: middle;
 }
 
 .shade-pill {
   max-width: 90%;
   margin: 0 auto 14px;
   padding: 14px 18px;
-  background: #e8e8e8;
-  border: 1px solid #d6d6d6;
+  background: var(--cert-shade-bg);
+  border: 1px solid var(--cert-shade-border);
   border-radius: 18px;
   font-weight: 700;
   text-align: center;
 }
 
-/* Texto central */
+/* =========================================
+   6. TIPOGRAFÍA Y TEXTOS
+   ========================================= */
 .cert-label-script {
-  font-size: 28px;
-  font-family: "Times New Roman", serif;
-  font-style: italic;
   margin-bottom: 14px;
+  font-family: var(--cert-font-serif);
+  font-size: 28px;
+  font-style: italic;
   text-align: center;
+  line-height: 1.2;
 }
 
 .cert-center {
-  text-align: center;
   margin-top: 10px;
+  text-align: center;
 }
 
-/* Bloque de info */
 .cert-info-block {
   margin-top: 10px;
   font-size: 14px;
@@ -1641,22 +1671,11 @@ function gcp_get_default_certificate_custom_styles() {
 }
 
 .cert-highlight {
-  color: #a30000;
+  color: var(--cert-highlight);
   font-weight: 700;
 }
 
-/* Tablas */
-.table-full {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.td-half {
-  width: 50%;
-  vertical-align: top;
-}
-
-/* Encabezado títulos */
+/* Títulos Superiores */
 .cert-title-main {
   font-size: 18px;
   font-weight: 700;
@@ -1667,39 +1686,56 @@ function gcp_get_default_certificate_custom_styles() {
 
 .cert-title-sub {
   margin-top: 6px;
-  font-weight: 600;
   font-size: 13px;
+  font-weight: 600;
   text-align: right;
 }
 
 .cert-nit {
-  font-weight: 700;
-  font-size: 13px;
   margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
 }
 
-/* Firmas */
+/* =========================================
+   7. TABLAS Y ESTRUCTURA
+   ========================================= */
+.table-full {
+  width: 100%;
+  border-collapse: collapse;
+  border: 0;
+}
+
+.td-half {
+  width: 50%;
+  vertical-align: top;
+  padding: 0 4px;
+}
+
+/* =========================================
+   8. FIRMAS Y FOOTER
+   ========================================= */
 .cert-sign-line {
-  border-top: 1px solid #333;
-  padding-top: 4px;
-  font-weight: 700;
-  font-size: 13px;
-  margin-bottom: 2px;
   display: inline-block;
   min-width: 260px;
+  margin-bottom: 2px;
+  padding-top: 4px;
+  border-top: 1px solid #333;
+  font-size: 13px;
+  font-weight: 700;
 }
 
-/* Imagen de firma del entrenador */
 .cert-signature-img {
   margin-bottom: 4px;
+  line-height: 0;
 }
 
 .cert-signature-img img {
-  max-height: 60px;
   width: auto;
+  max-height: 60px;
+  display: inline-block;
 }
 
-/* Footer */
 .cert-footer {
   margin-top: 22px;
   text-align: center;
@@ -1708,16 +1744,35 @@ function gcp_get_default_certificate_custom_styles() {
 }
 
 .cert-footer-web {
-  font-weight: 700;
-  font-size: 12px;
   margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-/* Evitar que se corten bloques grandes al generar PDF */
-.cert-wrapper,
-.cert-info-block,
-.cert-footer {
-  page-break-inside: avoid;
+/* =========================================
+   9. OPTIMIZACIÓN IMPRESIÓN / PDF
+   ========================================= */
+@media print {
+  body {
+    background: none;
+    margin: 0;
+  }
+
+  .cert-wrapper {
+    box-shadow: none;
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+    border: none;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .cert-info-block,
+  .cert-footer,
+  table {
+    page-break-inside: avoid;
+  }
 }
 CSS;
 }
