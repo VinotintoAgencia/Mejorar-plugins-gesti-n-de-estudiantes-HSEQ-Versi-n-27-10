@@ -1236,6 +1236,26 @@ function gcp_resolve_background_for_css( $background_url ) {
 }
 
 /**
+ * Allow http/https URLs as well as inlined data URIs for certificate assets.
+ *
+ * @param string $value Raw URL or data URI.
+ * @return string
+ */
+function gcp_sanitize_background_value( $value ) {
+    $value = trim( (string) $value );
+
+    if ( '' === $value ) {
+        return '';
+    }
+
+    if ( 0 === strpos( $value, 'data:image/' ) ) {
+        return $value;
+    }
+
+    return esc_url( $value );
+}
+
+/**
  * Generate sanitized, replaceable tokens for the certificate template.
  *
  * @param array $data Certificate payload from the admin form.
@@ -1247,8 +1267,9 @@ function gcp_build_certificate_tokens( $data ) {
         return htmlspecialchars( (string) $value, ENT_QUOTES, 'UTF-8' );
     };
 
-    $logo_url       = plugin_dir_url( __FILE__ ) . 'assets/images/logo hseq.png';
-    $background_url = gcp_get_certificate_background_url();
+    $logo_url            = plugin_dir_url( __FILE__ ) . 'assets/images/logo hseq.png';
+    $background_url      = gcp_get_certificate_background_url();
+    $background_resolved = gcp_resolve_background_for_css( $background_url );
 
     $default_trainer_name    = 'RUBY HIGUITA';
     $default_trainer_license = '[LICENCIA SST RUBY AQUÍ]';
@@ -1284,6 +1305,7 @@ function gcp_build_certificate_tokens( $data ) {
         'trainer_signature_image'        => $trainer_signature ? '<img src="' . $trainer_signature . '" alt="Firma del instructor" style="max-height:40px;">' : '&nbsp;',
         'logo_url'                       => esc_url( $logo_url ),
         'background_url'                 => esc_url( $background_url ),
+        'background_url_resolved'        => gcp_sanitize_background_value( $background_resolved ),
         'representante_legal_cert'       => 'Mónica Marcela Cañas Gomez',
         'url_verificacion_web'           => 'https://www.hseqdelgolfo.com.co',
         'web_verificacion_display'       => 'www.hseqdelgolfo.com.co',
@@ -1405,6 +1427,7 @@ function gcp_get_certificate_shortcode_catalog() {
         'trainer_signature_image'   => __( 'Firma del entrenador como imagen', 'gcp-generador-cert' ),
         'logo_url'                  => __( 'URL del logo configurado del certificado', 'gcp-generador-cert' ),
         'background_url'            => __( 'URL del fondo ilustrado', 'gcp-generador-cert' ),
+        'background_url_resolved'   => __( 'URL del fondo lista para PDF (usa url([background_url_resolved]))', 'gcp-generador-cert' ),
         'web_verificacion_display'  => __( 'URL corta de verificación', 'gcp-generador-cert' ),
         'url_verificacion_web'      => __( 'URL completa de verificación', 'gcp-generador-cert' ),
         'licencia_sst_hseq'         => __( 'Texto de licencia SST fija', 'gcp-generador-cert' ),
@@ -1849,6 +1872,7 @@ function gcp_render_personalizar_certificado_page() {
                             <input type="url" id="gcp_background_url" name="gcp_background_url" class="regular-text" value="<?php echo esc_attr( $saved_bg_url ); ?>" placeholder="https://tusitio.com/wp-content/uploads/fondo-certificado.png">
                             <p class="description"><?php esc_html_e( 'Pega la URL de una imagen PNG o JPG de tu biblioteca de medios. Déjalo vacío para usar el fondo predeterminado.', 'gcp-generador-cert' ); ?></p>
                             <p class="description"><?php esc_html_e( 'Sugerencia: usa imágenes verticales (A4) de al menos 1200 px de ancho, colores suaves y sin transparencias extremas para que el fondo se vea completo tras el filtro de lectura del texto.', 'gcp-generador-cert' ); ?></p>
+                            <p class="description"><?php esc_html_e( 'En tu HTML/CSS personalizado usa el shortcode [background_url_resolved] dentro de url(...) para que el fondo cargue también en el PDF (ejemplo: background-image: url("[background_url_resolved]");).', 'gcp-generador-cert' ); ?></p>
                         </td>
                     </tr>
                 </tbody>
@@ -1874,6 +1898,15 @@ function gcp_render_personalizar_certificado_page() {
                 <h3><?php esc_html_e( 'Tip para el fondo', 'gcp-generador-cert' ); ?></h3>
                 <p class="description"><?php esc_html_e( 'Usa un PNG o JPG vertical (A4), mínimo 1200 px de ancho, sin transparencias extremas y con colores suaves para que el texto se lea bien.', 'gcp-generador-cert' ); ?></p>
                 <p class="description"><?php esc_html_e( 'Pega la URL del fondo y reutilízalo en todos tus diseños personalizados.', 'gcp-generador-cert' ); ?></p>
+            </div>
+            <div class="gcp-customizer-card">
+                <h3><?php esc_html_e( 'Atajo para el fondo en tu HTML', 'gcp-generador-cert' ); ?></h3>
+                <p class="description"><?php esc_html_e( 'Inserta el shortcode resuelto en tu CSS para que el fondo se pinte también en el PDF.', 'gcp-generador-cert' ); ?></p>
+                <pre class="gcp-code-block">.cert-wrapper::before {
+  background-image: url('[background_url_resolved]');
+  background-size: cover;
+}</pre>
+                <p class="description"><?php esc_html_e( 'Si prefieres la URL sin procesar, usa [background_url].', 'gcp-generador-cert' ); ?></p>
             </div>
         </div>
 
