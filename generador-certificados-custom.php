@@ -1610,6 +1610,37 @@ function gcp_add_customize_certificate_submenu_page() {
 add_action( 'admin_menu', 'gcp_add_customize_certificate_submenu_page' );
 
 /**
+ * Allow downloading the base HTML template as a starting point.
+ */
+function gcp_handle_download_certificate_template() {
+    if ( ! is_admin() ) {
+        return;
+    }
+
+    if ( ! isset( $_GET['gcp_download_certificate_template'] ) ) {
+        return;
+    }
+
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_die( __( 'No tienes permisos suficientes para descargar la plantilla.', 'gcp-generador-cert' ) );
+    }
+
+    $nonce = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
+    if ( ! wp_verify_nonce( $nonce, 'gcp_download_certificate_template' ) ) {
+        wp_die( __( 'Nonce inválido al descargar la plantilla.', 'gcp-generador-cert' ) );
+    }
+
+    $template = gcp_get_default_certificate_custom_template();
+
+    nocache_headers();
+    header( 'Content-Type: text/html; charset=utf-8' );
+    header( 'Content-Disposition: attachment; filename="plantilla-certificado.html"' );
+    echo $template; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+    exit;
+}
+add_action( 'admin_init', 'gcp_handle_download_certificate_template' );
+
+/**
  * Render the customization page that lets admins edit the certificate template.
  */
 function gcp_render_personalizar_certificado_page() {
@@ -1619,6 +1650,7 @@ function gcp_render_personalizar_certificado_page() {
 
     $notice = '';
     $error  = '';
+    $imported_from_file = '';
 
     if ( isset( $_POST['gcp_personalizar_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['gcp_personalizar_nonce'] ) ), 'gcp_personalizar_certificado' ) ) {
         $reset = isset( $_POST['gcp_reset_template'] );
@@ -1628,11 +1660,35 @@ function gcp_render_personalizar_certificado_page() {
             delete_option( 'gcp_certificate_background_url' );
             $notice = __( 'La plantilla volvió al diseño predeterminado.', 'gcp-generador-cert' );
         } else {
+            $uploaded_template = '';
+            if ( isset( $_FILES['gcp_template_file'] ) && ! empty( $_FILES['gcp_template_file']['tmp_name'] ) ) {
+                $file = $_FILES['gcp_template_file'];
+                if ( UPLOAD_ERR_OK !== $file['error'] ) {
+                    $error = __( 'No se pudo subir el archivo de plantilla. Intenta nuevamente.', 'gcp-generador-cert' );
+                } else {
+                    $allowed_template_types = array(
+                        'html' => 'text/html',
+                        'htm'  => 'text/html',
+                    );
+                    $checked = wp_check_filetype_and_ext( $file['tmp_name'], $file['name'], $allowed_template_types );
+                    if ( empty( $checked['ext'] ) ) {
+                        $error = __( 'Solo se aceptan archivos .html con los shortcodes en tu diseño.', 'gcp-generador-cert' );
+                    } else {
+                        $uploaded_template   = file_get_contents( $file['tmp_name'] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+                        $imported_from_file  = sanitize_text_field( $file['name'] );
+                    }
+                }
+            }
+
             $template_raw = isset( $_POST['gcp_custom_template'] ) ? wp_unslash( $_POST['gcp_custom_template'] ) : '';
             $styles_raw   = isset( $_POST['gcp_custom_styles'] ) ? wp_unslash( $_POST['gcp_custom_styles'] ) : '';
             $bg_raw       = isset( $_POST['gcp_background_url'] ) ? wp_unslash( $_POST['gcp_background_url'] ) : '';
 
-            $template = current_user_can( 'unfiltered_html' ) ? $template_raw : wp_kses_post( $template_raw );
+            if ( '' !== $uploaded_template ) {
+                $template = current_user_can( 'unfiltered_html' ) ? $uploaded_template : wp_kses_post( $uploaded_template );
+            } else {
+                $template = current_user_can( 'unfiltered_html' ) ? $template_raw : wp_kses_post( $template_raw );
+            }
             $styles   = current_user_can( 'unfiltered_html' ) ? $styles_raw : wp_strip_all_tags( $styles_raw );
             $bg_url   = esc_url_raw( trim( $bg_raw ) );
 
@@ -1656,7 +1712,9 @@ function gcp_render_personalizar_certificado_page() {
             }
 
             if ( ! $error ) {
-                $notice = __( 'Plantilla personalizada guardada correctamente.', 'gcp-generador-cert' );
+                $notice = $imported_from_file
+                    ? sprintf( __( 'Plantilla importada desde %s y guardada correctamente.', 'gcp-generador-cert' ), esc_html( $imported_from_file ) )
+                    : __( 'Plantilla personalizada guardada correctamente.', 'gcp-generador-cert' );
             }
         }
     }
@@ -1678,15 +1736,29 @@ function gcp_render_personalizar_certificado_page() {
             <div class="notice notice-error is-dismissible"><p><?php echo esc_html( $error ); ?></p></div>
         <?php endif; ?>
 
-        <form method="post">
+        <form method="post" enctype="multipart/form-data">
             <?php wp_nonce_field( 'gcp_personalizar_certificado', 'gcp_personalizar_nonce' ); ?>
             <table class="form-table" role="presentation">
                 <tbody>
                     <tr>
+                        <th scope="row"><label for="gcp_template_file"><?php esc_html_e( 'Sube tu diseño en HTML', 'gcp-generador-cert' ); ?></label></th>
+                        <td>
+                            <input type="file" id="gcp_template_file" name="gcp_template_file" accept=".html,.htm">
+                            <p class="description"><?php esc_html_e( 'Crea tu certificado en HTML, coloca los shortcodes donde quieras los datos (por ejemplo, [nombre_completo]) y súbelo aquí.', 'gcp-generador-cert' ); ?></p>
+                            <p class="description"><?php esc_html_e( 'Si prefieres editar en pantalla, también puedes ajustar el HTML directamente en el campo de abajo.', 'gcp-generador-cert' ); ?></p>
+                            <?php $download_nonce = wp_create_nonce( 'gcp_download_certificate_template' ); ?>
+                            <p class="description">
+                                <a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=gcp_personalizar_certificado&gcp_download_certificate_template=1&_wpnonce=' . $download_nonce ) ); ?>">
+                                    <?php esc_html_e( 'Descargar plantilla base', 'gcp-generador-cert' ); ?>
+                                </a>
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
                         <th scope="row"><label for="gcp_custom_template"><?php esc_html_e( 'HTML de la plantilla', 'gcp-generador-cert' ); ?></label></th>
                         <td>
                             <textarea id="gcp_custom_template" name="gcp_custom_template" rows="16" class="large-text code" spellcheck="false"><?php echo esc_textarea( $template_value ); ?></textarea>
-                            <p class="description"><?php esc_html_e( 'Se reemplazarán automáticamente los shortcodes entre corchetes con los datos del certificado.', 'gcp-generador-cert' ); ?></p>
+                            <p class="description"><?php esc_html_e( 'Se reemplazarán automáticamente los shortcodes entre corchetes con los datos del certificado. Usa el botón “Ver shortcodes” para copiar los que necesites.', 'gcp-generador-cert' ); ?></p>
                         </td>
                     </tr>
                     <tr>
@@ -1713,6 +1785,22 @@ function gcp_render_personalizar_certificado_page() {
                 </button>
             </p>
         </form>
+
+        <div class="gcp-customizer-grid">
+            <div class="gcp-customizer-card">
+                <h3><?php esc_html_e( 'Pasos rápidos', 'gcp-generador-cert' ); ?></h3>
+                <ol class="gcp-customizer-steps">
+                    <li><?php esc_html_e( 'Descarga la plantilla base y ábrela en tu editor favorito.', 'gcp-generador-cert' ); ?></li>
+                    <li><?php esc_html_e( 'Coloca los shortcodes (por ejemplo, [nombre_completo], [cedula]) justo donde quieras ver los datos.', 'gcp-generador-cert' ); ?></li>
+                    <li><?php esc_html_e( 'Carga el archivo .html ya maquetado y guarda para usarlo en el próximo certificado.', 'gcp-generador-cert' ); ?></li>
+                </ol>
+            </div>
+            <div class="gcp-customizer-card">
+                <h3><?php esc_html_e( 'Tip para el fondo', 'gcp-generador-cert' ); ?></h3>
+                <p class="description"><?php esc_html_e( 'Usa un PNG o JPG vertical (A4), mínimo 1200 px de ancho, sin transparencias extremas y con colores suaves para que el texto se lea bien.', 'gcp-generador-cert' ); ?></p>
+                <p class="description"><?php esc_html_e( 'Pega la URL del fondo y reutilízalo en todos tus diseños personalizados.', 'gcp-generador-cert' ); ?></p>
+            </div>
+        </div>
 
         <h2><?php esc_html_e( 'Shortcodes disponibles', 'gcp-generador-cert' ); ?></h2>
         <p class="description"><?php esc_html_e( 'Coloca estos shortcodes en cualquier parte de tu HTML. También se reemplazarán otros campos personalizados si coinciden con el nombre del campo (por ejemplo, [etapa_del_curso]).', 'gcp-generador-cert' ); ?></p>

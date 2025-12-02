@@ -192,3 +192,33 @@
   font-size: 12px;
 }
 
+.gcp-customizer-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.gcp-customizer-card {
+  background: #fff;
+  border: 1px solid #e4e7ef;
+  border-radius: 6px;
+  padding: 12px 14px;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.04);
+}
+
+.gcp-customizer-card h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.gcp-customizer-steps {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.gcp-customizer-steps li {
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
