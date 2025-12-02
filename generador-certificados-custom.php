@@ -1178,7 +1178,7 @@ function gcp_ajax_fetch_student_certificates_handler() {
  * @return string
  */
 function gcp_get_certificate_background_url() {
-    $default = 'https://srv1847-files.hstgr.io/4f7ec8ad3cb7ea09/files/public_html/wp-content/plugins/generador-certificados-custom/assets/images/Dise%C3%B1o%20sin%20t%C3%ADtulo%20(26).png';
+    $default = 'https://srv1847-files.hstgr.io/4f7ec8ad3cb7ea09/files/public_html/wp-content/plugins/generador-certificados-custom/assets/images/Dise%C3%B1o%20sin%20t%C3%ADtulo%20(10).jpg';
     $custom  = trim( (string) get_option( 'gcp_certificate_background_url', '' ) );
 
     if ( '' === $custom ) {
@@ -1255,7 +1255,7 @@ function gcp_fetch_image_data_uri( $url ) {
  * @return string CSS-ready URL or data URI.
  */
 function gcp_resolve_background_for_css( $background_url ) {
-    $default = plugin_dir_url( __FILE__ ) . 'assets/images/background-certificado.svg';
+    $default = 'https://srv1847-files.hstgr.io/4f7ec8ad3cb7ea09/files/public_html/wp-content/plugins/generador-certificados-custom/assets/images/Dise%C3%B1o%20sin%20t%C3%ADtulo%20(10).jpg';
     $target  = $background_url ? $background_url : $default;
 
     // If default, no need to fetch.
@@ -1584,7 +1584,7 @@ function gcp_get_default_certificate_custom_styles() {
   margin: 0 auto;
   padding: 30px 40px 28px;
   background: var(--cert-bg-base) url('[background_url_resolved]') center center / 100% auto no-repeat,
-              var(--cert-bg-base) url('https://srv1847-files.hstgr.io/4f7ec8ad3cb7ea09/files/public_html/wp-content/plugins/generador-certificados-custom/assets/images/Dise%C3%B1o%20sin%20t%C3%ADtulo%20(26).png') center center / 100% auto no-repeat;
+              var(--cert-bg-base) url('https://srv1847-files.hstgr.io/4f7ec8ad3cb7ea09/files/public_html/wp-content/plugins/generador-certificados-custom/assets/images/Dise%C3%B1o%20sin%20t%C3%ADtulo%20(10).jpg') center center / 100% auto no-repeat;
   box-shadow: 0 0 14px rgba(0,0,0,0.12);
   overflow: hidden;
   font-family: var(--cert-font-main);
