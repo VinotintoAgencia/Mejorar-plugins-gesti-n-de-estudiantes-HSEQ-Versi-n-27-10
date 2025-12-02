@@ -1371,37 +1371,317 @@ function gcp_get_default_certificate_custom_template() {
   <meta charset="UTF-8">
   <title>Certificado personalizado</title>
 </head>
-<body style="font-family: Arial, sans-serif; padding: 24px; background: #f3f3f3;">
-  <div style="max-width: 900px; margin: 0 auto; background: #fff; padding: 24px; box-shadow: 0 0 18px rgba(0,0,0,0.08);">
-    <header style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px;">
-      <div style="flex: 0 0 160px;">
-        <img src="[logo_url]" alt="Logo" style="max-width: 160px; height: auto; display: block;">
-        <div style="font-weight: 700; font-size: 13px; margin-top: 6px;">NIT: 900.673.522-6</div>
+<body>
+<div class="cert-wrapper">
+  <div class="cert-content">
+
+    <!-- ENCABEZADO CON TABLA -->
+    <table class="table-full" style="margin-bottom: 18px;">
+      <tr>
+        <!-- Columna izquierda: Logo + NIT -->
+        <td class="td-half" style="text-align: left;">
+          <img src="[logo_url]" alt="Logo" style="max-width: 170px; height: auto; display: block;">
+          <div class="cert-nit">NIT: 900.673.522-6</div>
+        </td>
+
+        <!-- Columna derecha: Títulos -->
+        <td class="td-half" style="text-align: right;">
+          <div class="cert-title-main">
+            CERTIFICADO DE FORMACIÓN Y ENTRENAMIENTO<br>
+            PARA TRABAJOS EN ALTURAS
+          </div>
+          <div class="cert-title-sub">
+            MINTRABAJO N° RADICADO 08SE2018220000000030200
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- CENTRO -->
+    <div class="cert-center">
+
+      <div class="cert-label-script">Certifica que:</div>
+
+      <div class="shade-pill" style="font-size:22px;">
+        [nombre_completo]
       </div>
-      <div style="text-align: right; flex: 1 1 auto;">
-        <div style="font-size: 18px; font-weight: 700;">CERTIFICADO DE FORMACIÓN Y ENTRENAMIENTO</div>
-        <div style="font-size: 18px; font-weight: 700;">PARA TRABAJOS EN ALTURAS</div>
-        <div style="margin-top: 6px; font-weight: 600;">MINTRABAJO N° RADICADO 08SE2018220000000030200</div>
+
+      <div style="font-size:20px; font-family:'Times New Roman', serif; margin-bottom:10px;">
+        Curso y aprobó la formación y entrenamiento en:
       </div>
-    </header>
 
-    <p style="font-size: 15px; line-height: 1.6;">Certificamos que <strong>[nombre_completo]</strong> cursó y aprobó <strong>[nombre_del_curso]</strong> con una intensidad de <strong>[intensidad_horaria] horas</strong> el día <strong>[fecha_de_realizado]</strong> y fue expedido el <strong>[fecha_de_expedicion]</strong>.</p>
+      <div class="shade-pill" style="font-size:20px; line-height:1.3;">
+        [nombre_del_curso]
+      </div>
 
-    <p style="margin-top: 12px; font-size: 13px;">Documento: <strong>[cedula]</strong> · Validación: <strong>[id_ministerio_del_curso]</strong> · ARL: <strong>[arl]</strong></p>
-
-    <div style="margin-top: 20px; padding: 12px; border: 1px solid #ddd;">
-      <p style="margin: 0 0 6px 0; font-weight: 700;">Datos de empresa</p>
-      <p style="margin: 0;">NIT: [nit_de_la_empresa_emplead] · Representante: [representante_legal_de_la]</p>
     </div>
 
-    <footer style="margin-top: 20px; font-size: 12px; color: #444;">
-      <p style="margin: 0;">Entrenador: [trainer_name] (Licencia: [trainer_license])</p>
-      <p style="margin: 4px 0 0 0;">Verifica en: [web_verificacion_display] · Código interno: [id_ministerio_del_curso]</p>
-    </footer>
+    <!-- INFORMACIÓN DETALLADA -->
+    <div class="cert-info-block">
+
+      <p>
+        Con una intensidad de <span class="shade-box">[intensidad_horaria]</span> horas,
+        bajo la Resolución 4272 de 2021 Mintrabajo
+      </p>
+
+      <p>
+        Realizado en la ciudad de Apartadó, Antioquia:
+        <span class="shade-box">[fecha_de_inicio]</span>
+      </p>
+
+      <p>
+        Expedido en la ciudad de Apartadó, Antioquia:
+        <span class="shade-box">[fecha_de_realizado]</span>
+      </p>
+
+      <p>
+        Validación del certificado:
+        <span class="shade-box cert-highlight">NCI - HSEQ [id_ministerio_del_curso]</span>
+      </p>
+
+      <p>
+        Identificación de la empresa:
+        <span class="shade-box">[nit_de_la_empresa_emplead]</span>
+      </p>
+
+      <p>
+        Representante legal de la empresa:
+        <span class="shade-box">[representante_legal_de_la]</span>
+      </p>
+
+      <p>
+        ARL:
+        <span class="shade-box">[arl]</span>
+      </p>
+
+    </div>
+
+    <!-- FIRMAS CON TABLA -->
+    <table class="table-full" style="margin-top: 26px;">
+      <tr>
+        <!-- Firma Representante Legal (IZQUIERDA) -->
+        <td class="td-half" style="text-align: left;">
+          <span class="cert-sign-line">Mónica Marcela Cañas Gomez</span><br>
+          <span>Representante Legal</span>
+        </td>
+
+        <!-- Firma Entrenador (DERECHA) -->
+        <td class="td-half" style="text-align: right;">
+
+          <!-- Imagen de firma del entrenador -->
+          <div class="cert-signature-img">
+            [trainer_signature_image]
+          </div>
+
+          <span class="cert-sign-line">[trainer_name]</span><br>
+          <span>Entrenador trabajo en altura</span><br>
+          <span style="font-size:11px;">Licencia en SST N°: [trainer_license]</span>
+        </td>
+      </tr>
+    </table>
+
+    <!-- PIE -->
+    <div class="cert-footer">
+
+      <div>
+        Resolución 2024060390983 Licencia de Seguridad y Salud en Trabajo de la Secretaría de Salud y Protección Social de Antioquia.
+      </div>
+
+      <div>
+        Certificado N° CO 25.00541 en NTC 6072:2014 · BUREAU VERITAS CERTIFICATION · Acreditado ONAC 09-CPR-008
+      </div>
+
+      <div>
+        Ubicación geográfica Vereda Vijagual, corregimiento El Reposo Km 5 Vía Carepa
+      </div>
+
+      <div>
+        Este diploma puede ser verificado llamando al número: 310 463 2101
+      </div>
+
+      <div>
+        La autenticidad de este documento puede ser verificada en el registro electrónico que se encuentra en la página web
+      </div>
+
+      <div class="cert-footer-web">
+        www.hseqdelgolfo.com.co
+      </div>
+
+    </div>
+
   </div>
+</div>
 </body>
 </html>
 HTML;
+}
+
+/**
+ * Default CSS used alongside the starter custom template.
+ *
+ * @return string
+ */
+function gcp_get_default_certificate_custom_styles() {
+    return <<<CSS
+/* Contenedor general del certificado */
+.cert-wrapper {
+  max-width: 900px;
+  margin: 0 auto;
+  background: #ffffff;
+  box-shadow: 0 0 14px rgba(0,0,0,0.12);
+  padding: 30px 40px 28px;
+  position: relative;
+  overflow: hidden;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+}
+
+/* Fondo personalizado */
+.cert-wrapper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("[background_url_resolved]");
+  background-repeat: no-repeat;
+  background-position: left center;
+  background-size: contain;
+  opacity: 0.90;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cert-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* Cajas sombreadas */
+.shade-box {
+  display: inline-block;
+  padding: 6px 12px;
+  background: #e8e8e8;
+  border: 1px solid #d6d6d6;
+  border-radius: 10px;
+  min-width: 160px;
+  margin-left: 4px;
+}
+
+.shade-pill {
+  max-width: 90%;
+  margin: 0 auto 14px;
+  padding: 14px 18px;
+  background: #e8e8e8;
+  border: 1px solid #d6d6d6;
+  border-radius: 18px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Texto central */
+.cert-label-script {
+  font-size: 28px;
+  font-family: "Times New Roman", serif;
+  font-style: italic;
+  margin-bottom: 14px;
+  text-align: center;
+}
+
+.cert-center {
+  text-align: center;
+  margin-top: 10px;
+}
+
+/* Bloque de info */
+.cert-info-block {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.cert-info-block p {
+  margin: 2px 0;
+}
+
+.cert-highlight {
+  color: #a30000;
+  font-weight: 700;
+}
+
+/* Tablas */
+.table-full {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.td-half {
+  width: 50%;
+  vertical-align: top;
+}
+
+/* Encabezado títulos */
+.cert-title-main {
+  font-size: 18px;
+  font-weight: 700;
+  text-transform: uppercase;
+  line-height: 1.25;
+  text-align: right;
+}
+
+.cert-title-sub {
+  margin-top: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  text-align: right;
+}
+
+.cert-nit {
+  font-weight: 700;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+/* Firmas */
+.cert-sign-line {
+  border-top: 1px solid #333;
+  padding-top: 4px;
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 2px;
+  display: inline-block;
+  min-width: 260px;
+}
+
+/* Imagen de firma del entrenador */
+.cert-signature-img {
+  margin-bottom: 4px;
+}
+
+.cert-signature-img img {
+  max-height: 60px;
+  width: auto;
+}
+
+/* Footer */
+.cert-footer {
+  margin-top: 22px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.cert-footer-web {
+  font-weight: 700;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* Evitar que se corten bloques grandes al generar PDF */
+.cert-wrapper,
+.cert-info-block,
+.cert-footer {
+  page-break-inside: avoid;
+}
+CSS;
 }
 
 /**
@@ -1821,6 +2101,7 @@ function gcp_render_personalizar_certificado_page() {
     $saved_styles   = get_option( 'gcp_certificate_custom_styles', '' );
     $saved_bg_url   = get_option( 'gcp_certificate_background_url', '' );
     $template_value = $saved_template ? $saved_template : gcp_get_default_certificate_custom_template();
+    $styles_value   = $saved_styles ? $saved_styles : gcp_get_default_certificate_custom_styles();
     $shortcodes     = gcp_get_certificate_shortcode_catalog();
     ?>
     <div class="wrap gcp-customizer-page">
@@ -1862,7 +2143,7 @@ function gcp_render_personalizar_certificado_page() {
                     <tr>
                         <th scope="row"><label for="gcp_custom_styles"><?php esc_html_e( 'CSS adicional', 'gcp-generador-cert' ); ?></label></th>
                         <td>
-                            <textarea id="gcp_custom_styles" name="gcp_custom_styles" rows="8" class="large-text code" spellcheck="false"><?php echo esc_textarea( $saved_styles ); ?></textarea>
+                            <textarea id="gcp_custom_styles" name="gcp_custom_styles" rows="8" class="large-text code" spellcheck="false"><?php echo esc_textarea( $styles_value ); ?></textarea>
                             <p class="description"><?php esc_html_e( 'Este CSS se insertará en la cabecera del certificado si el HTML incluye la etiqueta <head>.', 'gcp-generador-cert' ); ?></p>
                         </td>
                     </tr>
