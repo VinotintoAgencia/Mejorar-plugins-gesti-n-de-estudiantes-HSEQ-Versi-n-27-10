@@ -1161,6 +1161,81 @@ function gcp_get_certificate_background_url() {
 }
 
 /**
+ * Fetch a remote image and return a data URI so mPDF can always render it,
+ * even if remote fetching is restricted on the server.
+ *
+ * @param string $url Image URL.
+ *
+ * @return string Empty string if not retrievable; otherwise data URI string.
+ */
+function gcp_fetch_image_data_uri( $url ) {
+    $cache_key = 'gcp_bg_data_uri_' . md5( $url );
+    $cached    = get_transient( $cache_key );
+    if ( false !== $cached ) {
+        return $cached;
+    }
+
+    $response = wp_remote_get(
+        $url,
+        array(
+            'timeout' => 8,
+        )
+    );
+
+    if ( is_wp_error( $response ) ) {
+        set_transient( $cache_key, '', HOUR_IN_SECONDS );
+        return '';
+    }
+
+    $code = wp_remote_retrieve_response_code( $response );
+    if ( 200 !== $code ) {
+        set_transient( $cache_key, '', HOUR_IN_SECONDS );
+        return '';
+    }
+
+    $body        = wp_remote_retrieve_body( $response );
+    $content_type = wp_remote_retrieve_header( $response, 'content-type' );
+
+    $allowed_types = array( 'image/png', 'image/jpeg', 'image/svg+xml' );
+    if ( ! $body || ! in_array( $content_type, $allowed_types, true ) ) {
+        set_transient( $cache_key, '', HOUR_IN_SECONDS );
+        return '';
+    }
+
+    $data_uri = 'data:' . $content_type . ';base64,' . base64_encode( $body );
+    set_transient( $cache_key, $data_uri, DAY_IN_SECONDS );
+
+    return $data_uri;
+}
+
+/**
+ * Resolve the background for CSS usage, preferring data URIs for custom URLs
+ * to ensure visibility in generated PDFs.
+ *
+ * @param string $background_url URL to the background image.
+ *
+ * @return string CSS-ready URL or data URI.
+ */
+function gcp_resolve_background_for_css( $background_url ) {
+    $default = plugin_dir_url( __FILE__ ) . 'assets/images/background-certificado.svg';
+    $target  = $background_url ? $background_url : $default;
+
+    // If default, no need to fetch.
+    if ( $target === $default ) {
+        return esc_url( $target );
+    }
+
+    // Attempt to inline as data URI for reliability.
+    $data_uri = gcp_fetch_image_data_uri( $target );
+    if ( $data_uri ) {
+        return $data_uri;
+    }
+
+    // Fallback to the provided URL.
+    return esc_url( $target );
+}
+
+/**
  * Generate sanitized, replaceable tokens for the certificate template.
  *
  * @param array $data Certificate payload from the admin form.
@@ -1360,7 +1435,7 @@ function gcp_get_certificate_html_template($data) {
     $representante_legal_empleadora = $tokens['representante_legal_de_la'];
     $fecha_inicio_curso = $tokens['fecha_de_inicio'];
     $logo_url          = $tokens['logo_url'];
-    $background_url    = $tokens['background_url'];
+    $background_url    = gcp_resolve_background_for_css( $tokens['background_url'] );
     $trainer_signature_html = $tokens['trainer_signature_image'];
     $trainer_name      = $tokens['trainer_name'];
     $trainer_license   = $tokens['trainer_license'];
@@ -1375,7 +1450,7 @@ function gcp_get_certificate_html_template($data) {
     $default_background = plugin_dir_url( __FILE__ ) . 'assets/images/background-certificado.svg';
     $has_custom_background = $background_url && $background_url !== $default_background;
     $overlay_gradient = $has_custom_background
-        ? 'linear-gradient(180deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.36) 42%, rgba(255,255,255,0.3) 100%)'
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.12) 42%, rgba(255,255,255,0.08) 100%)'
         : 'linear-gradient(180deg, rgba(255,255,255,0.86) 0%, rgba(255,255,255,0.78) 42%, rgba(255,255,255,0.72) 100%)';
 
 
