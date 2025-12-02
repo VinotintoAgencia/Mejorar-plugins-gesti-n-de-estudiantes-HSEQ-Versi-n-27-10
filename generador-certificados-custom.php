@@ -48,6 +48,25 @@ if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
     return;
 }
 
+/**
+ * Small helper to report whether mPDF is available and which version is loaded.
+ *
+ * @return array{available:bool, version:string|null}
+ */
+function gcp_get_mpdf_status() {
+    $available = class_exists( '\\Mpdf\\Mpdf' );
+    $version   = null;
+
+    if ( $available && defined( '\\Mpdf\\Mpdf::VERSION' ) ) {
+        $version = \Mpdf\Mpdf::VERSION;
+    }
+
+    return array(
+        'available' => $available,
+        'version'   => $version,
+    );
+}
+
 // +-------------------------------------------------------------------+
 // | PLUGIN ACTIVATION HOOK                                          |
 // +-------------------------------------------------------------------+
@@ -2026,6 +2045,15 @@ function gcp_render_personalizar_certificado_page() {
         wp_die( __( 'No tienes permisos suficientes para acceder a esta página.', 'gcp-generador-cert' ) );
     }
 
+    $mpdf_status   = gcp_get_mpdf_status();
+    $mpdf_message  = $mpdf_status['available']
+        ? sprintf(
+            /* translators: %s: mPDF version number. */
+            __( 'mPDF está activo%1$s para generar el PDF con tu plantilla.', 'gcp-generador-cert' ),
+            $mpdf_status['version'] ? ' (v' . esc_html( $mpdf_status['version'] ) . ')' : ''
+        )
+        : __( 'mPDF no está disponible. Asegúrate de tener la carpeta vendor con mpdf/mpdf antes de generar certificados.', 'gcp-generador-cert' );
+
     $notice = '';
     $error  = '';
     $imported_from_file = '';
@@ -2107,6 +2135,18 @@ function gcp_render_personalizar_certificado_page() {
     <div class="wrap gcp-customizer-page">
         <h1><?php esc_html_e( 'Personalizar certificado', 'gcp-generador-cert' ); ?></h1>
         <p class="description"><?php esc_html_e( 'Edita el HTML y el CSS de tu certificado. Usa los shortcodes para ubicar los datos dinámicos exactamente donde los necesites.', 'gcp-generador-cert' ); ?></p>
+
+        <div class="gcp-mpdf-status <?php echo $mpdf_status['available'] ? 'gcp-mpdf-ok' : 'gcp-mpdf-missing'; ?>">
+            <span class="dashicons <?php echo $mpdf_status['available'] ? 'dashicons-yes' : 'dashicons-warning'; ?>" aria-hidden="true"></span>
+            <div class="gcp-mpdf-status__text">
+                <strong><?php echo esc_html( $mpdf_message ); ?></strong>
+                <?php if ( ! $mpdf_status['available'] ) : ?>
+                    <span class="description"><?php esc_html_e( 'La generación del PDF usa mPDF, ubicado en la carpeta vendor. Verifica que vendor/autoload.php exista en el plugin.', 'gcp-generador-cert' ); ?></span>
+                <?php else : ?>
+                    <span class="description"><?php esc_html_e( 'Si cambias el diseño, el PDF usará mPDF para respetar tu HTML, CSS y fondo personalizado.', 'gcp-generador-cert' ); ?></span>
+                <?php endif; ?>
+            </div>
+        </div>
 
         <?php if ( $notice ) : ?>
             <div class="notice notice-success is-dismissible"><p><?php echo esc_html( $notice ); ?></p></div>

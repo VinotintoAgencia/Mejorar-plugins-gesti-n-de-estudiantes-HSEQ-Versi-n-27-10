@@ -171,6 +171,51 @@
   max-width: 980px;
 }
 
+.gcp-mpdf-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #e4e7ef;
+  background: #f8fafc;
+  margin: 12px 0 16px;
+}
+
+.gcp-mpdf-status .dashicons {
+  font-size: 20px;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+.gcp-mpdf-status__text {
+  line-height: 1.4;
+}
+
+.gcp-mpdf-status__text .description {
+  display: block;
+  color: #4b5563;
+  margin-top: 4px;
+}
+
+.gcp-mpdf-ok {
+  border-color: #c7f0d2;
+  background: #f0fdf4;
+}
+
+.gcp-mpdf-ok .dashicons {
+  color: #166534;
+}
+
+.gcp-mpdf-missing {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
+.gcp-mpdf-missing .dashicons {
+  color: #92400e;
+}
+
 .gcp-shortcode-list {
   margin: 12px 0 0 18px;
   padding: 0;
