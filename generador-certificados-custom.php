@@ -1178,7 +1178,7 @@ function gcp_ajax_fetch_student_certificates_handler() {
  * @return string
  */
 function gcp_get_certificate_background_url() {
-    $default = plugin_dir_url( __FILE__ ) . 'assets/images/background-certificado.svg';
+    $default = 'https://snow-alligator-339390.hostingersite.com/wp-content/uploads/2025/11/Diseno-sin-titulo-25.png';
     $custom  = trim( (string) get_option( 'gcp_certificate_background_url', '' ) );
 
     if ( '' === $custom ) {
@@ -1583,7 +1583,8 @@ function gcp_get_default_certificate_custom_styles() {
   max-width: 900px;
   margin: 0 auto;
   padding: 30px 40px 28px;
-  background-color: var(--cert-bg-base);
+  background: var(--cert-bg-base) url('[background_url_resolved]') center center / 100% auto no-repeat,
+              var(--cert-bg-base) url('https://snow-alligator-339390.hostingersite.com/wp-content/uploads/2025/11/Diseno-sin-titulo-25.png') center center / 100% auto no-repeat;
   box-shadow: 0 0 14px rgba(0,0,0,0.12);
   overflow: hidden;
   font-family: var(--cert-font-main);
@@ -1595,23 +1596,7 @@ function gcp_get_default_certificate_custom_styles() {
 }
 
 /* =========================================
-   3. IMAGEN DE FONDO (Capa 0)
-   ========================================= */
-.cert-wrapper::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: url('[background_url_resolved]');
-  background-repeat: no-repeat;
-  background-position: center center;
-  background-size: 100% auto;
-  z-index: 0;
-  opacity: 1;
-  pointer-events: none;
-}
-
-/* =========================================
-   4. CONTENIDO DEL CERTIFICADO (Capa 1)
+   3. CONTENIDO DEL CERTIFICADO (Capa 1)
    ========================================= */
 .cert-content {
   position: relative;
