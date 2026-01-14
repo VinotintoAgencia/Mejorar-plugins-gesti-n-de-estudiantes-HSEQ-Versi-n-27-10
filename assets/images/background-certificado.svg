@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="1754" viewBox="0 0 1240 1754">
+  <defs>
+    <linearGradient id="fade" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f5f5f5"/>
+      <stop offset="40%" stop-color="#fafafa"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1240" height="1754" fill="url(#fade)" />
+  <!-- Scaffolding illustration -->
+  <g stroke="#d3d3d3" stroke-width="4" fill="none" opacity="0.65">
+    <line x1="80" y1="60" x2="80" y2="1660" />
+    <line x1="200" y1="120" x2="200" y2="1700" />
+    <line x1="320" y1="90" x2="320" y2="1640" />
+    <line x1="440" y1="140" x2="440" y2="1680" />
+    <line x1="40" y1="220" x2="500" y2="220" />
+    <line x1="40" y1="420" x2="500" y2="420" />
+    <line x1="40" y1="620" x2="500" y2="620" />
+    <line x1="40" y1="820" x2="500" y2="820" />
+    <line x1="40" y1="1020" x2="500" y2="1020" />
+    <line x1="40" y1="1220" x2="500" y2="1220" />
+    <line x1="40" y1="1420" x2="500" y2="1420" />
+    <line x1="40" y1="1620" x2="500" y2="1620" />
+  </g>
+  <g stroke="#dcdcdc" stroke-width="3" opacity="0.6">
+    <line x1="40" y1="220" x2="500" y2="420" />
+    <line x1="500" y1="220" x2="40" y2="420" />
+    <line x1="40" y1="620" x2="500" y2="820" />
+    <line x1="500" y1="620" x2="40" y2="820" />
+    <line x1="40" y1="1020" x2="500" y2="1220" />
+    <line x1="500" y1="1020" x2="40" y2="1220" />
+    <line x1="40" y1="1420" x2="500" y2="1620" />
+    <line x1="500" y1="1420" x2="40" y2="1620" />
+  </g>
+  <!-- Worker silhouette -->
+  <g transform="translate(880 200)" opacity="0.65">
+    <line x1="200" y1="-40" x2="200" y2="1600" stroke="#d6d6d6" stroke-width="5" />
+    <circle cx="200" cy="340" r="32" fill="#bfbfbf" />
+    <rect x="170" y="372" width="60" height="140" rx="12" fill="#b0b0b0" />
+    <rect x="156" y="412" width="88" height="32" fill="#dcdcdc" />
+    <line x1="170" y1="420" x2="96" y2="470" stroke="#b0b0b0" stroke-width="14" stroke-linecap="round" />
+    <line x1="230" y1="420" x2="304" y2="470" stroke="#b0b0b0" stroke-width="14" stroke-linecap="round" />
+    <line x1="188" y1="512" x2="130" y2="612" stroke="#a8a8a8" stroke-width="16" stroke-linecap="round" />
+    <line x1="212" y1="512" x2="278" y2="628" stroke="#a8a8a8" stroke-width="16" stroke-linecap="round" />
+  </g>
+</svg>

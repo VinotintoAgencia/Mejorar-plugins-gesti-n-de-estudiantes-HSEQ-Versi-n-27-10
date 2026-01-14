@@ -10,6 +10,13 @@ jQuery(function($) {
   const $preview      = $('#gcp-certificate-preview');
   const $previewSpans = $preview.find('span');
   const $pdfContainer = $('#gcp-pdf-link-container');
+  const $verificationNotice = $('#gcp-verification-notice');
+  const ajaxStrings = typeof gcp_ajax_obj === 'undefined' ? {} : gcp_ajax_obj;
+  const AJAX_URL = typeof ajaxurl !== 'undefined'
+    ? ajaxurl
+    : (ajaxStrings.ajaxurl || '');
+  const VIEW_MORE_LABEL = ajaxStrings.viewMoreText || 'Ver más';
+  const VIEW_LESS_LABEL = ajaxStrings.viewLessText || 'Ver menos';
   const SPINNER_CLASS = 'gcp-spinner';
   const SLUGS = [
     'nombre_del_curso', 'nombre_de_la_empresa_empl', 'nit_de_la_empresa_emplead',
@@ -49,6 +56,32 @@ jQuery(function($) {
     $(`.${SPINNER_CLASS}`).remove();
   }
 
+  function clearNotice($target) {
+    if ($target && $target.length) {
+      $target.empty();
+    }
+  }
+
+  function showNotice($target, messages, isSuccess = true) {
+    if (!messages || !messages.length) {
+      return;
+    }
+
+    if (!$target || !$target.length) {
+      alert(messages.join('\n'));
+      return;
+    }
+
+    const $notice = $('<div>')
+      .addClass(`notice ${isSuccess ? 'notice-success' : 'notice-error'} is-dismissible`);
+
+    messages.forEach(msg => {
+      $notice.append($('<p>').text(msg));
+    });
+
+    $target.empty().append($notice);
+  }
+
   // Obtiene con seguridad un campo personalizado
   function getCustomField(contact, slug) {
     if (!contact.custom_fields) return '';
@@ -86,6 +119,11 @@ jQuery(function($) {
       return alert('Por favor, ingresa más de 3 caracteres para buscar.');
     }
 
+    if (!AJAX_URL) {
+      console.error('URL de AJAX no disponible.');
+      return alert('Error de configuración. Contacta al administrador.');
+    }
+
     const nonce = $('#gcp_nonce').val();
     if (!nonce) {
       console.error('Nonce no encontrado.');
@@ -94,7 +132,7 @@ jQuery(function($) {
 
     showSpinner($cedula);
 
-    $.post(ajaxurl, {
+    $.post(AJAX_URL, {
       action: 'gcp_buscar_contacto_por_cedula',
       cedula: val,
       nonce: nonce
@@ -152,36 +190,72 @@ jQuery(function($) {
 
   // 3) Registrar verificación
   $('#gcp-register-verification-button').on('click', function() {
+    const $noticeTarget = $verificationNotice.length ? $verificationNotice : $pdfContainer;
     const val = $cedula.val().trim();
+    clearNotice($noticeTarget);
+
     if (!val) {
-      return alert('Por favor, ingresa una cédula.');
+      const missingMsg = ajaxStrings.verificationMissingCedula || 'Por favor, ingresa una cédula.';
+      showNotice($noticeTarget, [missingMsg], false);
+      return;
     }
 
-    showSpinner($pdfContainer);
+    const $spinnerAnchor = $noticeTarget.length ? $noticeTarget : $cedula;
+    if (!AJAX_URL) {
+      showNotice($noticeTarget, ['No se pudo determinar la URL de AJAX.'], false);
+      return;
+    }
+    showSpinner($spinnerAnchor);
     const nonce = $('#gcp_nonce').val();
     if (!nonce) {
       removeSpinners();
-      return alert('Error de seguridad.');
+      showNotice($noticeTarget, ['Error de seguridad.'], false);
+      return;
     }
 
-    $.post(ajaxurl, {
+    $.post(AJAX_URL, {
       action: 'gcp_guardar_verificacion_registro',
       nonce: nonce,
       cedula: val
     }, 'json')
     .done(function(resp) {
       removeSpinners();
-      const cls = resp.success ? 'notice-success' : 'notice-error';
       const data = resp && resp.data ? resp.data : null;
-      const fallbackMsg = resp.success ? 'Verificación registrada.' : 'Error al registrar.';
-      const msg = data && data.message ? data.message : fallbackMsg;
-      $pdfContainer.html(`<div class="notice ${cls} is-dismissible"><p>${msg}</p></div>`);
+      if (resp.success) {
+        const successMsg = ajaxStrings.verificationSuccess || 'Verificación Exitosa';
+        const messages = [successMsg];
+        if (data && data.message && data.message !== successMsg) {
+          messages.push(data.message);
+        }
+        showNotice($noticeTarget, messages, true);
+      } else {
+        const fallbackMsg = data && data.message ? data.message : (ajaxStrings.verificationError || 'Error al registrar.');
+        showNotice($noticeTarget, [fallbackMsg], false);
+      }
     })
     .fail(function() {
       removeSpinners();
-      $pdfContainer.html('<div class="notice notice-error is-dismissible"><p>Error de comunicación al registrar.</p></div>');
+      const fallback = ajaxStrings.verificationCommError || 'Error de comunicación al registrar.';
+      showNotice($noticeTarget, [fallback], false);
     });
   });
+
+  // 4) Mostrar/ocultar detalles en la tabla de certificados
+  const $certTable = $('#gcp-certificates-table');
+  if ($certTable.length) {
+    $certTable.on('click', '.gcp-toggle-cert-details', function(e) {
+      e.preventDefault();
+      const $btn = $(this);
+      const $row = $btn.closest('tr');
+      const $detailsRow = $row.next('.gcp-cert-details-row');
+      if (!$detailsRow.length) return;
+
+      const isOpen = $detailsRow.hasClass('is-open');
+      $detailsRow.toggleClass('is-open', !isOpen);
+      $btn.attr('aria-expanded', isOpen ? 'false' : 'true');
+      $btn.text(isOpen ? VIEW_MORE_LABEL : VIEW_LESS_LABEL);
+    });
+  }
 
   // 4) Generar PDF real
   $('#gcp-generate-real-pdf-button').on('click', function() {
@@ -208,8 +282,14 @@ jQuery(function($) {
       alert('Advertencia: el nombre del curso está vacío.');
     }
 
+    if (!AJAX_URL) {
+      removeSpinners();
+      $pdfContainer.html('<p style="color:red;">No se pudo determinar la URL de AJAX.</p>');
+      return;
+    }
+
     $.ajax({
-      url: ajaxurl,
+      url: AJAX_URL,
       method: 'POST',
       dataType: 'json',
       data: formData

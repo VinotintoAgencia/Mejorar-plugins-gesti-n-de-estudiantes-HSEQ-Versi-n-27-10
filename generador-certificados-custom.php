@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Generador de Certificados Personalizado
  * Description: Permite generar certificados buscando contactos en FluentCRM y utilizando su API REST, y que los alumnos descarguen sus certificados.
- * Version: 1.5.0
+ * Version: 1.6.0
  * Author: <a href="https://www.vinotintoagencia.com">Vinotinto Agencia</a>
  * Text Domain: gcp-generador-cert
  * License: GPLv2 or later
@@ -12,6 +12,10 @@
 // Prevenir acceso directo
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
+}
+
+if ( ! defined( 'GCP_PLUGIN_VERSION' ) ) {
+    define( 'GCP_PLUGIN_VERSION', '1.6.0' );
 }
 
 // Importar la clase Subscriber de FluentCRM
@@ -44,6 +48,25 @@ if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
     return;
 }
 
+/**
+ * Small helper to report whether mPDF is available and which version is loaded.
+ *
+ * @return array{available:bool, version:string|null}
+ */
+function gcp_get_mpdf_status() {
+    $available = class_exists( '\\Mpdf\\Mpdf' );
+    $version   = null;
+
+    if ( $available && defined( '\\Mpdf\\Mpdf::VERSION' ) ) {
+        $version = \Mpdf\Mpdf::VERSION;
+    }
+
+    return array(
+        'available' => $available,
+        'version'   => $version,
+    );
+}
+
 // +-------------------------------------------------------------------+
 // | PLUGIN ACTIVATION HOOK                                          |
 // +-------------------------------------------------------------------+
@@ -69,6 +92,101 @@ add_action( 'plugins_loaded', 'gcp_maybe_update_db_schema' );
 
 function gcp_maybe_update_db_schema() {
     gcp_maybe_add_etapa_column();
+}
+
+/**
+ * When a Fluent Form submission is inserted, sync the "cedula" custom field
+ * with the matching FluentCRM subscriber so the CRM always has the latest value.
+ *
+ * @param int   $entry_id  Fluent Form entry ID.
+ * @param array $form_data Submitted form data.
+ * @param array $form      Form definition.
+ */
+add_action( 'fluentform/submission_inserted', 'gcp_sync_cedula_with_fluentcrm', 10, 3 );
+function gcp_sync_cedula_with_fluentcrm( $entry_id, $form_data, $form ) {
+    if ( empty( $form_data ) || ! is_array( $form_data ) ) {
+        return;
+    }
+
+    if ( ! function_exists( 'fluentCrmDb' ) || ! class_exists( '\\FluentCrm\\App\\Models\\Subscriber' ) ) {
+        return;
+    }
+
+    $email = '';
+    $cedula = '';
+
+    // Attempt to detect standard keys first.
+    $known_email_keys  = array( 'email', 'correo', 'correo_electronico' );
+    $known_cedula_keys = array( 'cedula', 'cédula', 'numero_de_cedula', 'numero_de_cédula', 'numero_documento', 'documento' );
+
+    foreach ( $known_email_keys as $key ) {
+        if ( ! empty( $form_data[ $key ] ) ) {
+            $email = sanitize_email( $form_data[ $key ] );
+            if ( $email ) {
+                break;
+            }
+        }
+    }
+
+    foreach ( $known_cedula_keys as $key ) {
+        if ( ! empty( $form_data[ $key ] ) ) {
+            $cedula = sanitize_text_field( $form_data[ $key ] );
+            if ( $cedula ) {
+                break;
+            }
+        }
+    }
+
+    // Fallback: inspect every key searching for patterns.
+    if ( ! $email ) {
+        foreach ( $form_data as $key => $value ) {
+            if ( ! is_scalar( $value ) ) {
+                continue;
+            }
+            if ( false !== stripos( $key, 'email' ) ) {
+                $email = sanitize_email( $value );
+                if ( $email ) {
+                    break;
+                }
+            }
+        }
+    }
+
+    if ( ! $cedula ) {
+        foreach ( $form_data as $key => $value ) {
+            if ( ! is_scalar( $value ) ) {
+                continue;
+            }
+            if ( false !== stripos( $key, 'cedula' ) || false !== stripos( $key, 'cédula' ) ) {
+                $cedula = sanitize_text_field( $value );
+                if ( $cedula ) {
+                    break;
+                }
+            }
+        }
+    }
+
+    if ( empty( $email ) || empty( $cedula ) ) {
+        return;
+    }
+
+    try {
+        $subscriber = Subscriber::where( 'email', $email )->first();
+        if ( ! $subscriber ) {
+            return;
+        }
+
+        $current_cedula = $subscriber->getMeta( 'cedula' );
+        if ( $current_cedula === $cedula ) {
+            return;
+        }
+
+        $subscriber->attachMeta( array( 'cedula' => $cedula ) );
+    } catch ( \Exception $e ) {
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            error_log( 'GCP Plugin - Error sincronizando cédula desde Fluent Forms: ' . $e->getMessage() );
+        }
+    }
 }
 
 /**
@@ -502,11 +620,13 @@ function gcp_enqueue_admin_scripts( $hook_suffix ) {
         return;
     }
 
+    $script_version = gcp_get_asset_version( 'js/admin-scripts.js', '1.5.1' );
+
     wp_enqueue_script(
         'gcp-admin-main-script',
         plugin_dir_url( __FILE__ ) . 'js/admin-scripts.js',
         array( 'jquery' ),
-        '1.5.0',
+        $script_version,
         true
     );
 
@@ -514,17 +634,41 @@ function gcp_enqueue_admin_scripts( $hook_suffix ) {
         'gcp-admin-main-script',
         'gcp_ajax_obj', // Este nonce se usa para el PDF, el de búsqueda está en el form
         array(
-            'ajaxurl' => admin_url( 'admin-ajax.php' ),
-            'nonce'   => wp_create_nonce( 'gcp_pdf_generation_nonce' )
+            'ajaxurl'                   => admin_url( 'admin-ajax.php' ),
+            'nonce'                     => wp_create_nonce( 'gcp_pdf_generation_nonce' ),
+            'verificationSuccess'       => __( 'Verificación Exitosa', 'gcp-generador-cert' ),
+            'verificationError'         => __( 'Error al registrar.', 'gcp-generador-cert' ),
+            'verificationCommError'     => __( 'Error de comunicación al registrar.', 'gcp-generador-cert' ),
+            'verificationMissingCedula' => __( 'Por favor, ingresa una cédula.', 'gcp-generador-cert' ),
+            'viewMoreText'              => __( 'Ver más', 'gcp-generador-cert' ),
+            'viewLessText'              => __( 'Ver menos', 'gcp-generador-cert' ),
         )
     );
     // Estilos del formulario en la página de administración
+    $style_version = gcp_get_asset_version( 'css/admin-style.css', '1.5.1' );
     wp_enqueue_style(
         'gcp-admin-style',
         plugin_dir_url( __FILE__ ) . 'css/admin-style.css',
         array(),
-        '1.5.0'
+        $style_version
     );
+}
+
+/**
+ * Return the last modification time for an asset to use it as version and avoid stale caches.
+ *
+ * @param string $relative_path Asset path relative to the plugin root.
+ * @param string $fallback      Fallback string when the file does not exist.
+ *
+ * @return string|int
+ */
+function gcp_get_asset_version( $relative_path, $fallback = '' ) {
+    $asset_path = plugin_dir_path( __FILE__ ) . ltrim( $relative_path, '/' );
+    if ( file_exists( $asset_path ) ) {
+        return (string) filemtime( $asset_path );
+    }
+
+    return $fallback ?: ( defined( 'GCP_PLUGIN_VERSION' ) ? GCP_PLUGIN_VERSION : '1.0.0' );
 }
 
 
@@ -864,6 +1008,25 @@ function gcp_handle_pdf_generation_request() {
         }
 
         $mpdf = new \Mpdf\Mpdf($mpdf_config);
+
+        $background_for_pdf = gcp_resolve_background_for_css( gcp_get_certificate_background_url() );
+        $is_data_uri        = 0 === strpos( $background_for_pdf, 'data:image/' );
+        $is_png_or_jpg      = false;
+
+        if ( $is_data_uri ) {
+            $is_png_or_jpg = 0 === strpos( $background_for_pdf, 'data:image/png' ) || 0 === strpos( $background_for_pdf, 'data:image/jpeg' );
+        } else {
+            $path          = $background_for_pdf ? parse_url( $background_for_pdf, PHP_URL_PATH ) : '';
+            $is_png_or_jpg = (bool) ( $path && preg_match( '/\.(png|jpe?g)$/i', $path ) );
+        }
+
+        if ( $background_for_pdf && $is_png_or_jpg ) {
+            $mpdf->SetDefaultBodyCSS( 'background-image', "url('{$background_for_pdf}')" );
+            $mpdf->SetDefaultBodyCSS( 'background-image-resize', 6 );
+            $mpdf->SetDefaultBodyCSS( 'background-repeat', 'no-repeat' );
+            $mpdf->SetDefaultBodyCSS( 'background-position', 'center top' );
+        }
+
         $mpdf->SetDisplayMode('fullpage');
         $mpdf->WriteHTML($certificate_html);
 
@@ -1009,53 +1172,747 @@ function gcp_ajax_fetch_student_certificates_handler() {
 // | PLANTILLA HTML DEL CERTIFICADO (CON MPDF)                         |
 // +-------------------------------------------------------------------+
 
-function gcp_get_certificate_html_template($data) {
-    // Sanitizar datos
-    $nombre_completo    = !empty($data['nombre_completo']) ? htmlspecialchars($data['nombre_completo'], ENT_QUOTES, 'UTF-8') : '[Nombre no disponible]';
-    $nombre_curso       = !empty($data['nombre_del_curso']) ? htmlspecialchars($data['nombre_del_curso'], ENT_QUOTES, 'UTF-8') : '[Curso no especificado]';
-    $cedula_display     = !empty($data['cedula']) ? htmlspecialchars($data['cedula'], ENT_QUOTES, 'UTF-8') : '[Cédula no disponible]'; // Para mostrar en el certificado si es necesario.
-    $fecha_expedicion   = !empty($data['fecha_de_expedicion']) ? htmlspecialchars($data['fecha_de_expedicion'], ENT_QUOTES, 'UTF-8') : date_i18n(get_option('date_format'));
-    $intensidad_horaria = !empty($data['intensidad_horaria']) ? htmlspecialchars($data['intensidad_horaria'], ENT_QUOTES, 'UTF-8') : '[N/A]';
-    $nit_empresa        = !empty($data['nit_de_la_empresa_emplead']) ? htmlspecialchars($data['nit_de_la_empresa_emplead'], ENT_QUOTES, 'UTF-8') : '[N/A]'; // Usar este para $nit_empresa_empleadora
-    $arl                = !empty($data['arl']) ? htmlspecialchars($data['arl'], ENT_QUOTES, 'UTF-8') : '[N/A]'; // Usar este para $arl_alumno
-    $fecha_realizado    = !empty($data['fecha_de_realizado']) ? htmlspecialchars($data['fecha_de_realizado'], ENT_QUOTES, 'UTF-8') : '[Fecha no especificada]';
-    $codigo_validacion  = !empty($data['id_ministerio_del_curso']) ? htmlspecialchars($data['id_ministerio_del_curso'], ENT_QUOTES, 'UTF-8') : '[N/A]';
-    $representante_legal_empleadora = !empty($data['representante_legal_de_la']) ? htmlspecialchars($data['representante_legal_de_la'], ENT_QUOTES, 'UTF-8') : '[N/A]';
-    
-    // Datos Fijos
-    $logo_url = plugin_dir_url( __FILE__ ) . 'assets/images/logo hseq.png';
+/**
+ * Get the active certificate background image.
+ *
+ * @return string
+ */
+function gcp_get_certificate_background_url() {
+    $default = 'https://srv1847-files.hstgr.io/4f7ec8ad3cb7ea09/files/public_html/wp-content/plugins/generador-certificados-custom/assets/images/Dise%C3%B1o%20sin%20t%C3%ADtulo%20(10).jpg';
+    $custom  = trim( (string) get_option( 'gcp_certificate_background_url', '' ) );
+
+    if ( '' === $custom ) {
+        return $default;
+    }
+
+    $filetype = wp_check_filetype( $custom, array(
+        'png'  => 'image/png',
+        'jpg'  => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+    ) );
+
+    if ( empty( $filetype['ext'] ) ) {
+        return $default;
+    }
+
+    return esc_url( $custom );
+}
+
+/**
+ * Provide detailed diagnostics about the configured background to help
+ * administrators troubleshoot when the image is not appearing in the PDF.
+ *
+ * @return array
+ */
+function gcp_get_certificate_background_diagnostics() {
+    $default = 'https://srv1847-files.hstgr.io/4f7ec8ad3cb7ea09/files/public_html/wp-content/plugins/generador-certificados-custom/assets/images/Dise%C3%B1o%20sin%20t%C3%ADtulo%20(10).jpg';
+    $custom  = trim( (string) get_option( 'gcp_certificate_background_url', '' ) );
+
+    $selected = $custom ? $custom : $default;
+    $is_data  = 0 === strpos( $selected, 'data:image/' );
+
+    $filetype = $is_data
+        ? array( 'ext' => 'data', 'type' => 'inline' )
+        : wp_check_filetype( $selected, array(
+            'png'  => 'image/png',
+            'jpg'  => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'svg'  => 'image/svg+xml',
+        ) );
+
+    $resolved          = gcp_resolve_background_for_css( $selected );
+    $resolved_is_data  = 0 === strpos( $resolved, 'data:image/' );
+    $allow_url_fopen   = ini_get( 'allow_url_fopen' );
+    $http_status       = '';
+    $http_error        = '';
+    $content_type_head = '';
+
+    if ( ! $is_data && 0 === strpos( $selected, 'http' ) ) {
+        $head = wp_remote_head( $selected, array( 'timeout' => 5 ) );
+        if ( is_wp_error( $head ) ) {
+            $http_error = $head->get_error_message();
+        } else {
+            $http_status       = wp_remote_retrieve_response_code( $head );
+            $content_type_head = wp_remote_retrieve_header( $head, 'content-type' );
+        }
+    }
+
+    $notes = array();
+    if ( ! $custom ) {
+        $notes[] = __( 'Se está usando el fondo predeterminado porque no hay una URL guardada.', 'gcp-generador-cert' );
+    }
+    if ( empty( $filetype['ext'] ) || ! in_array( $filetype['ext'], array( 'png', 'jpg', 'jpeg', 'data' ), true ) ) {
+        $notes[] = __( 'mPDF solo admite JPG o PNG como fondo. Verifica la extensión.', 'gcp-generador-cert' );
+    }
+    if ( $content_type_head && ! in_array( $content_type_head, array( 'image/png', 'image/jpeg' ), true ) ) {
+        $notes[] = sprintf( __( 'El servidor devolvió Content-Type: %s (debe ser image/png o image/jpeg).', 'gcp-generador-cert' ), esc_html( $content_type_head ) );
+    }
+    if ( $http_error ) {
+        $notes[] = sprintf( __( 'No se pudo acceder a la imagen: %s', 'gcp-generador-cert' ), esc_html( $http_error ) );
+    }
+    if ( $http_status && $http_status >= 400 ) {
+        $notes[] = sprintf( __( 'El servidor respondió con el código HTTP: %s.', 'gcp-generador-cert' ), esc_html( $http_status ) );
+    }
+    if ( ! $allow_url_fopen ) {
+        $notes[] = __( 'El servidor tiene allow_url_fopen desactivado; podría bloquear la descarga remota de la imagen.', 'gcp-generador-cert' );
+    }
+    if ( ! $resolved ) {
+        $notes[] = __( 'No se pudo resolver el fondo para el CSS/ PDF (la URL podría no ser accesible).', 'gcp-generador-cert' );
+    }
+
+    return array(
+        'selected'            => $selected,
+        'resolved'            => $resolved,
+        'using_default'       => ! $custom,
+        'filetype'            => $filetype,
+        'resolved_is_data'    => $resolved_is_data,
+        'allow_url_fopen'     => (bool) $allow_url_fopen,
+        'http_status'         => $http_status,
+        'http_error'          => $http_error,
+        'content_type_head'   => $content_type_head,
+        'notes'               => $notes,
+        'ok_for_mpdf'         => $resolved && ( $resolved_is_data || in_array( $filetype['ext'], array( 'png', 'jpg', 'jpeg' ), true ) ),
+    );
+}
+
+/**
+ * Fetch a remote image and return a data URI so mPDF can always render it,
+ * even if remote fetching is restricted on the server.
+ *
+ * @param string $url Image URL.
+ *
+ * @return string Empty string if not retrievable; otherwise data URI string.
+ */
+function gcp_fetch_image_data_uri( $url ) {
+    $cache_key = 'gcp_bg_data_uri_' . md5( $url );
+    $cached    = get_transient( $cache_key );
+    if ( false !== $cached ) {
+        return $cached;
+    }
+
+    $response = wp_remote_get(
+        $url,
+        array(
+            'timeout' => 8,
+        )
+    );
+
+    if ( is_wp_error( $response ) ) {
+        set_transient( $cache_key, '', HOUR_IN_SECONDS );
+        return '';
+    }
+
+    $code = wp_remote_retrieve_response_code( $response );
+    if ( 200 !== $code ) {
+        set_transient( $cache_key, '', HOUR_IN_SECONDS );
+        return '';
+    }
+
+    $body        = wp_remote_retrieve_body( $response );
+    $content_type = wp_remote_retrieve_header( $response, 'content-type' );
+
+    $allowed_types = array( 'image/png', 'image/jpeg', 'image/svg+xml' );
+    if ( ! $body || ! in_array( $content_type, $allowed_types, true ) ) {
+        set_transient( $cache_key, '', HOUR_IN_SECONDS );
+        return '';
+    }
+
+    $data_uri = 'data:' . $content_type . ';base64,' . base64_encode( $body );
+    set_transient( $cache_key, $data_uri, DAY_IN_SECONDS );
+
+    return $data_uri;
+}
+
+/**
+ * Resolve the background for CSS usage, preferring data URIs for custom URLs
+ * to ensure visibility in generated PDFs.
+ *
+ * @param string $background_url URL to the background image.
+ *
+ * @return string CSS-ready URL or data URI.
+ */
+function gcp_resolve_background_for_css( $background_url ) {
+    $default = 'https://srv1847-files.hstgr.io/4f7ec8ad3cb7ea09/files/public_html/wp-content/plugins/generador-certificados-custom/assets/images/Dise%C3%B1o%20sin%20t%C3%ADtulo%20(10).jpg';
+    $target  = $background_url ? $background_url : $default;
+
+    // If default, no need to fetch.
+    if ( $target === $default ) {
+        return esc_url( $target );
+    }
+
+    // Attempt to inline as data URI for reliability.
+    $data_uri = gcp_fetch_image_data_uri( $target );
+    if ( $data_uri ) {
+        return $data_uri;
+    }
+
+    // Fallback to the provided URL.
+    return esc_url( $target );
+}
+
+/**
+ * Allow http/https URLs as well as inlined data URIs for certificate assets.
+ *
+ * @param string $value Raw URL or data URI.
+ * @return string
+ */
+function gcp_sanitize_background_value( $value ) {
+    $value = trim( (string) $value );
+
+    if ( '' === $value ) {
+        return '';
+    }
+
+    if ( 0 === strpos( $value, 'data:image/' ) ) {
+        return $value;
+    }
+
+    return esc_url( $value );
+}
+
+/**
+ * Generate sanitized, replaceable tokens for the certificate template.
+ *
+ * @param array $data Certificate payload from the admin form.
+ *
+ * @return array
+ */
+function gcp_build_certificate_tokens( $data ) {
+    $sanitize_text = function( $value ) {
+        return htmlspecialchars( (string) $value, ENT_QUOTES, 'UTF-8' );
+    };
+
+    $logo_url            = plugin_dir_url( __FILE__ ) . 'assets/images/logo hseq.png';
+    $background_url      = gcp_get_certificate_background_url();
+    $background_resolved = gcp_resolve_background_for_css( $background_url );
 
     $default_trainer_name    = 'RUBY HIGUITA';
     $default_trainer_license = '[LICENCIA SST RUBY AQUÍ]';
 
-    $trainer_name      = ! empty( $data['trainer_name'] ) ? htmlspecialchars( $data['trainer_name'], ENT_QUOTES, 'UTF-8' ) : $default_trainer_name;
-    $trainer_license   = ! empty( $data['trainer_license'] ) ? htmlspecialchars( $data['trainer_license'], ENT_QUOTES, 'UTF-8' ) : $default_trainer_license;
+    $trainer_name      = ! empty( $data['trainer_name'] ) ? $sanitize_text( $data['trainer_name'] ) : $default_trainer_name;
+    $trainer_license   = ! empty( $data['trainer_license'] ) ? $sanitize_text( $data['trainer_license'] ) : $default_trainer_license;
     $trainer_signature = ! empty( $data['trainer_signature'] ) ? esc_url( $data['trainer_signature'] ) : '';
 
     if ( empty( $data['trainer_name'] ) && ! empty( $data['trainer_id'] ) ) {
         $trainer = gcp_get_trainer_data( $data['trainer_id'] );
         if ( $trainer ) {
-            $trainer_name      = htmlspecialchars( $trainer['name'], ENT_QUOTES, 'UTF-8' );
-            $trainer_license   = htmlspecialchars( $trainer['license'], ENT_QUOTES, 'UTF-8' ) ?: $trainer_license;
+            $trainer_name      = $sanitize_text( $trainer['name'] );
+            $trainer_license   = $trainer['license'] ? $sanitize_text( $trainer['license'] ) : $trainer_license;
             $trainer_signature = $trainer['signature_url'] ? esc_url( $trainer['signature_url'] ) : $trainer_signature;
         }
     }
 
-    $trainer_signature_html = $trainer_signature ? '<img src="' . $trainer_signature . '" alt="Firma del instructor" style="max-height:40px;">' : '&nbsp;';
+    $tokens = array(
+        'nombre_completo'                => ! empty( $data['nombre_completo'] ) ? $sanitize_text( $data['nombre_completo'] ) : '[Nombre no disponible]',
+        'nombre_del_curso'               => ! empty( $data['nombre_del_curso'] ) ? $sanitize_text( $data['nombre_del_curso'] ) : '[Curso no especificado]',
+        'cedula'                         => ! empty( $data['cedula'] ) ? $sanitize_text( $data['cedula'] ) : '[Cédula no disponible]',
+        'fecha_de_expedicion'            => ! empty( $data['fecha_de_expedicion'] ) ? $sanitize_text( $data['fecha_de_expedicion'] ) : date_i18n( get_option( 'date_format' ) ),
+        'intensidad_horaria'             => ! empty( $data['intensidad_horaria'] ) ? $sanitize_text( $data['intensidad_horaria'] ) : '[N/A]',
+        'nit_de_la_empresa_emplead'      => ! empty( $data['nit_de_la_empresa_emplead'] ) ? $sanitize_text( $data['nit_de_la_empresa_emplead'] ) : '[N/A]',
+        'arl'                            => ! empty( $data['arl'] ) ? $sanitize_text( $data['arl'] ) : '[N/A]',
+        'fecha_de_realizado'             => ! empty( $data['fecha_de_realizado'] ) ? $sanitize_text( $data['fecha_de_realizado'] ) : '[Fecha no especificada]',
+        'id_ministerio_del_curso'        => ! empty( $data['id_ministerio_del_curso'] ) ? $sanitize_text( $data['id_ministerio_del_curso'] ) : '[N/A]',
+        'representante_legal_de_la'      => ! empty( $data['representante_legal_de_la'] ) ? $sanitize_text( $data['representante_legal_de_la'] ) : '[N/A]',
+        'fecha_de_inicio'                => ! empty( $data['fecha_de_inicio'] ) ? $sanitize_text( $data['fecha_de_inicio'] ) : '[FECHA INICIO PENDIENTE]',
+        'trainer_name'                   => $trainer_name,
+        'trainer_license'                => $trainer_license,
+        'trainer_signature'              => $trainer_signature,
+        'trainer_signature_image'        => $trainer_signature ? '<img src="' . $trainer_signature . '" alt="Firma del instructor" style="max-height:40px;">' : '&nbsp;',
+        'logo_url'                       => esc_url( $logo_url ),
+        'background_url'                 => esc_url( $background_url ),
+        'background_url_resolved'        => gcp_sanitize_background_value( $background_resolved ),
+        'representante_legal_cert'       => 'Mónica Marcela Cañas Gomez',
+        'url_verificacion_web'           => 'https://www.hseqdelgolfo.com.co',
+        'web_verificacion_display'       => 'www.hseqdelgolfo.com.co',
+        'licencia_sst_hseq'              => 'Resolución 202460390983 Licencia de Seguridad y Salud en Trabajo de la Secretaría de Salud y Protección Social de Antioquia',
+        'telefonos_verificacion'         => '310 463 2102 - 311 609 5867',
+        'ciudad_expedicion'              => 'Apartadó, Antioquia',
+        'resolucion_mintrabajo'          => '4272 de 2021 Mintrabajo',
+    );
 
-    $representante_legal_certificadora = "Mónica Marcela Cañas Gomez";
-    $url_verificacion_web = "https://www.hseqdelgolfo.com.co";
-    $web_verificacion_display = "www.hseqdelgolfo.com.co";
-    $licencia_sst_hseq = "Resolución 202460390983 Licencia de Seguridad y Salud en Trabajo de la Secretaría de Salud y Protección Social de Antioquia";
-    $telefonos_verificacion = "310 463 2102 - 311 609 5867";
-    $ciudad_expedicion = "Apartadó, Antioquia";
-    $resolucion_mintrabajo = "4272 de 2021 Mintrabajo"; // Corregir a Mintrabajo si es el caso
-    
-    // Fecha de inicio del curso (campo personalizado)
-    $fecha_inicio_curso = !empty($data['fecha_de_inicio']) ? htmlspecialchars($data['fecha_de_inicio'], ENT_QUOTES, 'UTF-8') : '[FECHA INICIO PENDIENTE]';
+    foreach ( $data as $key => $value ) {
+        if ( isset( $tokens[ $key ] ) ) {
+            continue;
+        }
+
+        $tokens[ $key ] = ( '' === $value || null === $value ) ? '' : $sanitize_text( $value );
+    }
+
+    return apply_filters( 'gcp_certificate_tokens', $tokens, $data );
+}
+
+/**
+ * Render custom certificate templates with shortcode-like tokens.
+ *
+ * @param array $tokens Sanitized replacement tokens.
+ *
+ * @return string
+ */
+function gcp_render_custom_certificate_template( $tokens ) {
+    $template = trim( (string) get_option( 'gcp_certificate_custom_template', '' ) );
+    if ( '' === $template ) {
+        return '';
+    }
+
+    $styles    = (string) get_option( 'gcp_certificate_custom_styles', '' );
+    $rendered  = $template;
+
+    foreach ( $tokens as $tag => $value ) {
+        $rendered = str_replace( '[' . $tag . ']', $value, $rendered );
+    }
+
+    if ( $styles ) {
+        $style_block = "\n<style>\n{$styles}\n</style>\n";
+        if ( false !== stripos( $rendered, '</head>' ) ) {
+            $rendered = str_replace( '</head>', $style_block . '</head>', $rendered );
+        } else {
+            $rendered = $style_block . $rendered;
+        }
+    }
+
+    return $rendered;
+}
+
+/**
+ * Default starter template admins can use when no custom template is saved.
+ *
+ * @return string
+ */
+function gcp_get_default_certificate_custom_template() {
+    return <<<HTML
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Certificado personalizado</title>
+</head>
+<body>
+<div class="cert-wrapper">
+  <div class="cert-content">
+
+    <!-- ENCABEZADO CON TABLA -->
+    <table class="table-full" style="margin-bottom: 18px;">
+      <tr>
+        <!-- Columna izquierda: Logo + NIT -->
+        <td class="td-half" style="text-align: left;">
+          <img src="[logo_url]" alt="Logo" style="max-width: 170px; height: auto; display: block;">
+          <div class="cert-nit">NIT: 900.673.522-6</div>
+        </td>
+
+        <!-- Columna derecha: Títulos -->
+        <td class="td-half" style="text-align: right;">
+          <div class="cert-title-main">
+            CERTIFICADO DE FORMACIÓN Y ENTRENAMIENTO<br>
+            PARA TRABAJOS EN ALTURAS
+          </div>
+          <div class="cert-title-sub">
+            MINTRABAJO N° RADICADO 08SE2018220000000030200
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- CENTRO -->
+    <div class="cert-center">
+
+      <div class="cert-label-script">Certifica que:</div>
+
+      <div class="shade-pill" style="font-size:22px;">
+        [nombre_completo]
+      </div>
+
+      <div style="font-size:20px; font-family:'Times New Roman', serif; margin-bottom:10px;">
+        Cursó y aprobó la formación y entrenamiento en:
+      </div>
+
+      <div class="shade-pill" style="font-size:20px; line-height:1.3;">
+        [nombre_del_curso]
+      </div>
+
+    </div>
+
+    <!-- INFORMACIÓN DETALLADA -->
+    <div class="cert-info-block">
+
+      <p>
+        Con una intensidad de <span class="shade-box">[intensidad_horaria]</span> horas,
+        bajo la Resolución 4272 de 2021 Mintrabajo
+      </p>
+
+      <p>
+        Realizado en la ciudad de Apartadó, Antioquia:
+        <span class="shade-box">[fecha_de_inicio]</span>
+      </p>
+
+      <p>
+        Expedido en la ciudad de Apartadó, Antioquia:
+        <span class="shade-box">[fecha_de_realizado]</span>
+      </p>
+
+      <p>
+        Validación del certificado:
+        <span class="shade-box cert-highlight">NCI - HSEQ [id_ministerio_del_curso]</span>
+      </p>
+
+      <p>
+        Identificación de la empresa:
+        <span class="shade-box">[nit_de_la_empresa_emplead]</span>
+      </p>
+
+      <p>
+        Representante legal de la empresa:
+        <span class="shade-box">[representante_legal_de_la]</span>
+      </p>
+
+      <p>
+        ARL:
+        <span class="shade-box">[arl]</span>
+      </p>
+
+    </div>
+
+    <!-- FIRMAS CON TABLA -->
+    <table class="table-full" style="margin-top: 26px;">
+      <tr>
+        <!-- Firma Representante Legal (IZQUIERDA) -->
+        <td class="td-half" style="text-align: left;">
+          <div style="height: 64px;"></div>
+          <span class="cert-sign-line">Mónica Marcela Cañas Gomez</span><br>
+          <span>Representante Legal</span>
+        </td>
+
+        <!-- Firma Entrenador (DERECHA) -->
+        <td class="td-half" style="text-align: right;">
+
+          <!-- Imagen de firma del entrenador -->
+          <div class="cert-signature-img">
+            [trainer_signature_image]
+          </div>
+
+          <span class="cert-sign-line">[trainer_name]</span><br>
+          <span>Entrenador trabajo en altura</span><br>
+          <span style="font-size:11px;">Licencia en SST N°: [trainer_license]</span>
+        </td>
+      </tr>
+    </table>
+
+    <!-- PIE -->
+    <div class="cert-footer">
+
+      <div>
+        Resolución 2024060390983 Licencia de Seguridad y Salud en Trabajo de la Secretaría de Salud y Protección Social de Antioquia.
+      </div>
+
+      <div>
+        Certificado N° CO 25.00541 en NTC 6072:2014 · BUREAU VERITAS CERTIFICATION · Acreditado ONAC 09-CPR-008
+      </div>
+
+      <div>
+        Ubicación geográfica Vereda Vijagual, corregimiento El Reposo Km 5 Vía Carepa
+      </div>
+
+      <div>
+        Este diploma puede ser verificado llamando al número: 310 463 2101
+      </div>
+
+      <div>
+        La autenticidad de este documento puede ser verificada en el registro electrónico que se encuentra en la página web
+      </div>
+
+      <div class="cert-footer-web">
+        www.hseqdelgolfo.com.co
+      </div>
+
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
+HTML;
+}
+
+/**
+ * Default CSS used alongside the starter custom template.
+ *
+ * @return string
+ */
+function gcp_get_default_certificate_custom_styles() {
+    return <<<CSS
+/* =========================================
+   1. VARIABLES Y CONFIGURACIÓN GLOBAL
+   ========================================= */
+:root {
+  --cert-font-main: Arial, "Helvetica Neue", Helvetica, sans-serif;
+  --cert-font-serif: "Times New Roman", Times, serif;
+  --cert-bg-base: #ffffff;      /* Color base del papel */
+  --cert-shade-bg: #e8e8e8;     /* Fondo de las cajitas grises */
+  --cert-shade-border: #d6d6d6; /* Borde de las cajitas */
+  --cert-highlight: #a30000;    /* Rojo para textos destacados */
+  --cert-text-color: #000000;
+}
+
+/* =========================================
+   2. CONTENEDOR PRINCIPAL (El papel)
+   ========================================= */
+.cert-wrapper {
+  position: relative; /* Necesario para ubicar el fondo */
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 30px 40px 28px;
+  background: var(--cert-bg-base) url('[background_url_resolved]') center center / 100% auto no-repeat,
+              var(--cert-bg-base) url('https://srv1847-files.hstgr.io/4f7ec8ad3cb7ea09/files/public_html/wp-content/plugins/generador-certificados-custom/assets/images/Dise%C3%B1o%20sin%20t%C3%ADtulo%20(10).jpg') center center / 100% auto no-repeat;
+  box-shadow: 0 0 14px rgba(0,0,0,0.12);
+  overflow: hidden;
+  font-family: var(--cert-font-main);
+  font-size: 14px;
+  color: var(--cert-text-color);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  page-break-inside: avoid;
+}
+
+/* =========================================
+   3. CONTENIDO DEL CERTIFICADO (Capa 1)
+   ========================================= */
+.cert-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* =========================================
+   5. COMPONENTES: CAJAS GRISES
+   ========================================= */
+.shade-box {
+  display: inline-block;
+  min-width: 160px;
+  padding: 6px 12px;
+  margin-left: 4px;
+  background: var(--cert-shade-bg);
+  border: 1px solid var(--cert-shade-border);
+  border-radius: 10px;
+  vertical-align: middle;
+}
+
+.shade-pill {
+  max-width: 90%;
+  margin: 0 auto 14px;
+  padding: 14px 18px;
+  background: var(--cert-shade-bg);
+  border: 1px solid var(--cert-shade-border);
+  border-radius: 18px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* =========================================
+   6. TIPOGRAFÍA Y TEXTOS
+   ========================================= */
+.cert-label-script {
+  margin-bottom: 14px;
+  font-family: var(--cert-font-serif);
+  font-size: 28px;
+  font-style: italic;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.cert-center {
+  margin-top: 10px;
+  text-align: center;
+}
+
+.cert-info-block {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.cert-info-block p {
+  margin: 2px 0;
+}
+
+.cert-highlight {
+  color: var(--cert-highlight);
+  font-weight: 700;
+}
+
+/* Títulos Superiores */
+.cert-title-main {
+  font-size: 18px;
+  font-weight: 700;
+  text-transform: uppercase;
+  line-height: 1.25;
+  text-align: right;
+}
+
+.cert-title-sub {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.cert-nit {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* =========================================
+   7. TABLAS Y ESTRUCTURA
+   ========================================= */
+.table-full {
+  width: 100%;
+  border-collapse: collapse;
+  border: 0;
+}
+
+.td-half {
+  width: 50%;
+  vertical-align: top;
+  padding: 0 4px;
+}
+
+/* =========================================
+   8. FIRMAS Y FOOTER
+   ========================================= */
+.cert-sign-line {
+  display: inline-block;
+  min-width: 260px;
+  margin-bottom: 2px;
+  padding-top: 4px;
+  border-top: 1px solid #333;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cert-signature-img {
+  margin-bottom: 4px;
+  line-height: 0;
+}
+
+.cert-signature-img img {
+  width: auto;
+  max-height: 60px;
+  display: inline-block;
+}
+
+.cert-footer {
+  margin-top: 22px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.cert-footer-web {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* =========================================
+   9. OPTIMIZACIÓN IMPRESIÓN / PDF
+   ========================================= */
+@media print {
+  body {
+    background: none;
+    margin: 0;
+  }
+
+  .cert-wrapper {
+    box-shadow: none;
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+    border: none;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .cert-info-block,
+  .cert-footer,
+  table {
+    page-break-inside: avoid;
+  }
+}
+CSS;
+}
+
+/**
+ * Shortcode catalog for the admin helper list.
+ *
+ * @return array
+ */
+function gcp_get_certificate_shortcode_catalog() {
+    return array(
+        'nombre_completo'           => __( 'Nombre completo del estudiante', 'gcp-generador-cert' ),
+        'cedula'                    => __( 'Número de documento del estudiante', 'gcp-generador-cert' ),
+        'nombre_del_curso'          => __( 'Nombre del curso aprobado', 'gcp-generador-cert' ),
+        'intensidad_horaria'        => __( 'Intensidad horaria reportada', 'gcp-generador-cert' ),
+        'fecha_de_inicio'           => __( 'Fecha de inicio del curso', 'gcp-generador-cert' ),
+        'fecha_de_realizado'        => __( 'Fecha de finalización del curso', 'gcp-generador-cert' ),
+        'fecha_de_expedicion'       => __( 'Fecha de expedición del certificado', 'gcp-generador-cert' ),
+        'nit_de_la_empresa_emplead' => __( 'NIT de la empresa empleadora', 'gcp-generador-cert' ),
+        'representante_legal_de_la' => __( 'Representante legal de la empresa', 'gcp-generador-cert' ),
+        'arl'                       => __( 'ARL del estudiante', 'gcp-generador-cert' ),
+        'id_ministerio_del_curso'   => __( 'Código/NCI de validación', 'gcp-generador-cert' ),
+        'trainer_name'              => __( 'Nombre del entrenador', 'gcp-generador-cert' ),
+        'trainer_license'           => __( 'Licencia SST del entrenador', 'gcp-generador-cert' ),
+        'trainer_signature_image'   => __( 'Firma del entrenador como imagen', 'gcp-generador-cert' ),
+        'logo_url'                  => __( 'URL del logo configurado del certificado', 'gcp-generador-cert' ),
+        'background_url'            => __( 'URL del fondo ilustrado', 'gcp-generador-cert' ),
+        'background_url_resolved'   => __( 'URL del fondo lista para PDF (usa url([background_url_resolved]))', 'gcp-generador-cert' ),
+        'web_verificacion_display'  => __( 'URL corta de verificación', 'gcp-generador-cert' ),
+        'url_verificacion_web'      => __( 'URL completa de verificación', 'gcp-generador-cert' ),
+        'licencia_sst_hseq'         => __( 'Texto de licencia SST fija', 'gcp-generador-cert' ),
+        'telefonos_verificacion'    => __( 'Teléfonos de verificación', 'gcp-generador-cert' ),
+        'resolucion_mintrabajo'     => __( 'Resolución de referencia del curso', 'gcp-generador-cert' ),
+        'ciudad_expedicion'         => __( 'Ciudad donde se expide el certificado', 'gcp-generador-cert' ),
+        'representante_legal_cert'  => __( 'Representante legal certificador', 'gcp-generador-cert' ),
+    );
+}
+
+function gcp_get_certificate_html_template($data) {
+    $tokens = gcp_build_certificate_tokens( $data );
+
+    $custom_html = gcp_render_custom_certificate_template( $tokens );
+    if ( $custom_html ) {
+        return $custom_html;
+    }
+
+    $nombre_completo   = $tokens['nombre_completo'];
+    $nombre_curso      = $tokens['nombre_del_curso'];
+    $cedula_display    = $tokens['cedula'];
+    $fecha_expedicion  = $tokens['fecha_de_expedicion'];
+    $intensidad_horaria = $tokens['intensidad_horaria'];
+    $nit_empresa       = $tokens['nit_de_la_empresa_emplead'];
+    $arl               = $tokens['arl'];
+    $fecha_realizado   = $tokens['fecha_de_realizado'];
+    $codigo_validacion = $tokens['id_ministerio_del_curso'];
+    $representante_legal_empleadora = $tokens['representante_legal_de_la'];
+    $fecha_inicio_curso = $tokens['fecha_de_inicio'];
+    $logo_url          = $tokens['logo_url'];
+    $background_url    = gcp_resolve_background_for_css( $tokens['background_url'] );
+    $trainer_signature_html = $tokens['trainer_signature_image'];
+    $trainer_name      = $tokens['trainer_name'];
+    $trainer_license   = $tokens['trainer_license'];
+    $representante_legal_certificadora = $tokens['representante_legal_cert'];
+    $url_verificacion_web  = $tokens['url_verificacion_web'];
+    $web_verificacion_display = $tokens['web_verificacion_display'];
+    $licencia_sst_hseq = $tokens['licencia_sst_hseq'];
+    $telefonos_verificacion = $tokens['telefonos_verificacion'];
+    $ciudad_expedicion = $tokens['ciudad_expedicion'];
+    $resolucion_mintrabajo = $tokens['resolucion_mintrabajo'];
+
+    $default_background = plugin_dir_url( __FILE__ ) . 'assets/images/background-certificado.svg';
+    $has_custom_background = $background_url && $background_url !== $default_background;
+    $overlay_gradient = $has_custom_background
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.12) 42%, rgba(255,255,255,0.08) 100%)'
+        : 'linear-gradient(180deg, rgba(255,255,255,0.86) 0%, rgba(255,255,255,0.78) 42%, rgba(255,255,255,0.72) 100%)';
 
 
-    // HTML y CSS del certificado (tomado de tu último fragmento)
+    // HTML y CSS del certificado (diseño alineado a maqueta)
     $html = <<<HTML
 <!DOCTYPE html>
 <html lang="es">
@@ -1063,188 +1920,171 @@ function gcp_get_certificate_html_template($data) {
   <meta charset="UTF-8">
   <title>Certificado - {$nombre_completo}</title>
   <style>
-    /* Reset y tipografía */
     * { margin:0; padding:0; box-sizing:border-box; }
     body {
-      font-family: 'DejaVu Sans', sans-serif; /* DejaVu Sans es buena para mPDF y caracteres especiales */
-      color: #333;
-      background: #fff;
-      line-height:1.5;
-      font-size:11pt; /* Tamaño base puede ser ajustado */
+      font-family: 'DejaVu Sans', sans-serif;
+      color: #0b0b0b;
+      background: #d8d8d8;
+      line-height:1.4;
+      font-size:10pt;
+      padding: 6px;
     }
     .certificate {
-      padding:15mm; /* Márgenes internos del contenido del certificado */
-      position:relative; /* Para la marca de agua */
+      position: relative;
+      max-width: 1040px;
+      min-height: 660px;
+      margin: 0 auto;
+      padding: 14mm 16mm 12mm;
+      background: #d6d6d6 url('{$background_url}') center/cover no-repeat;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+      overflow: hidden;
     }
-    /* Marca de agua muy sutil */
     .certificate::before {
-      content: 'HSEQ del Golfo';
-      position:absolute;
-      top:50%; left:50%;
-      transform:translate(-50%,-50%) rotate(-30deg); /* Ajustar rotación y posición */
-      font-size:80pt; /* Reducir si es muy grande */
-      color:#4f81ba; /* Color primario */
-      opacity:0.03; /* Muy sutil */
-      z-index:0; /* Detrás del contenido */
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: {$overlay_gradient};
+      pointer-events: none;
     }
-    /* Encabezado con línea de acento */
-    .header {
-      width:100%;
-      margin-bottom:10px;
-      border-bottom:3px solid #4f81ba;
-      padding-bottom:5px;
-      text-align:center;
+    .content { position: relative; z-index: 1; }
+    .header-grid {
+      display: flex;
+      width: 100%;
+      flex-wrap: nowrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
     }
-    .header td {
-      vertical-align:middle;
-      text-align:center;
-      padding-bottom:5px;
+    .logo { flex: 0 0 145px; }
+    .logo img { width: 135px; height: auto; display: block; }
+    .nit { margin-top: 2px; font-weight: 700; font-size: 8.8pt; letter-spacing: 0.2px; }
+    .header-meta { flex: 1 1 auto; min-width: 0; text-align: right; color: #0b0b0b; padding-top: 0; line-height: 1.16; }
+    .header-meta .title-sub { font-size: 12pt; font-weight: 800; letter-spacing: 0.2px; text-transform: uppercase; }
+    .header-meta .radicado { margin-top: 3px; font-weight: 700; font-size: 9.6pt; letter-spacing: 0.2px; }
+    .cert-label { font-size: 10.5pt; font-weight: 700; margin: 4px 0 2px; }
+    .field {
+      width: 100%;
+      background: linear-gradient(180deg, #ededed 0%, #e2e2e2 100%);
+      border: 1px solid #bfc3c8;
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-size: 12.6pt;
+      font-weight: 700;
+      color: #0b0b0b;
+      margin-bottom: 8px;
     }
-    .logo img {
-      width:90px !important;
-      height:auto;
-      display:block;
-      margin:0 auto 5px;
+    .course-field { font-size: 14pt; }
+    .detail-row {
+      display: grid;
+      grid-template-columns: 32% 68%;
+      margin-bottom: 5px;
+      overflow: hidden;
+      border: 1px solid #c5c7cb;
+      border-radius: 6px;
+      background: linear-gradient(180deg, #f2f2f2 0%, #e6e6e6 100%);
     }
-    .title {
-      text-align:center;
-      font-weight:700;
-      color:#4f81ba;
-      font-size:16pt;
-      font-family:'DejaVu Sans', sans-serif;
-      padding-left:0;
+    .detail-label {
+      background: linear-gradient(180deg, #d7d7d7 0%, #c9c9c9 100%);
+      padding: 7px 9px;
+      font-weight: 700;
+      font-size: 10pt;
+      border-right: 1px solid #bfc3c8;
+      display: flex;
+      align-items: center;
     }
-    .title small {
-      display:block;
-      font-size:8pt;
-      color:#555;
-      margin-top:4px;
-      font-weight:400;
+    .detail-value {
+      padding: 7px 11px;
+      font-size: 10pt;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      color: #0f0f0f;
     }
-    /* Secciones principales */
-    .section {
-      text-align:center;
-      margin:15px 0; /* Reducir margen vertical */
+    .validation-box {
+      margin: 10px auto 8px;
+      padding: 10px 12px;
+      width: fit-content;
+      border: 1px solid #000;
+      border-radius: 8px;
+      background: #b10c10;
+      color: #fff;
+      font-size: 11.4pt;
+      font-weight: 800;
+      letter-spacing: 0.8px;
     }
-    .section .label {
-      font-weight:600; /* Un poco menos bold que 700 */
-      font-size:10pt;
-      margin-bottom:3px; /* Menos espacio */
-      color: #222; /* Un poco más oscuro */
-    }
-    .section .value {
-      font-size:14pt; /* Un poco más pequeño que antes */
-      font-weight:700;
-      color: #000; /* Negro para el nombre y curso */
-      margin-top:1px;
-    }
-    /* Tabla de detalles refinada */
-    .details {
-      width:100%;
-      border-collapse:collapse;
-      margin:15px 0;
-      font-size:9pt;
-    }
-    .details th, .details td {
-      padding:7px 5px; /* Ajustar padding */
-      text-align:left;
-      border-bottom:1px solid #e0e0e0;
-    }
-    .details th {
-      background:#4f81ba; /* Color primario */
-      color:#fff;
-      font-weight:600; /* Un poco menos bold */
-    }
-    .details tr:nth-child(even) td { background: #f8f9fa; } /* Color de fila alterno más sutil */
-    /* Firmas */
     .signatures {
-      width:100%;
-      margin-top:25mm; /* Más espacio antes de las firmas */
-      margin-bottom: 15mm;
-      font-size:9pt;
-      table-layout: fixed; /* Ayuda a que las celdas respeten el ancho */
+      display:grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+      margin-top: 16px;
     }
-    .signatures td {
-      width:50%; /* Asegurar anchos iguales */
-      text-align:center;
-      vertical-align:top;
-      padding:0 10px;
+    .signature { text-align:center; }
+    .signature .line {
+      margin: 0 auto 7px;
+      border-top: 1.6px solid #1a1a1a;
+      width: 78%;
+      height: 22px;
     }
-    .sign-line {
-      border-top:1px solid #333;
-      width:70%; /* Línea más corta */
-      margin:0 auto 5px auto; /* Menos espacio después de la línea */
-      height: 20px; /* Espacio para la firma */
-    }
-    .sign-line p { margin:0; line-height: 1.3; }
-    /* Pie de página minimalista */
+    .signature p { margin: 0; font-size: 9.8pt; color:#0f0f0f; line-height:1.35; font-weight: 700; }
     .footer {
       text-align:center;
-      font-size:7.5pt; /* Un poco más grande */
-      color:#666; /* Un poco más oscuro */
-      border-top:1px solid #e0e0e0;
-      padding-top:8px;
-      margin-top: 15mm;
+      font-size:8pt;
+      color:#0f0f0f;
+      margin-top: 12px;
+      line-height:1.4;
+      font-weight: 600;
     }
-    .footer p { margin-bottom: 3px; }
-    .footer a {
-      color:#4f81ba; /* Color primario */
-      text-decoration:none;
-      font-weight:600;
-    }
+    .footer strong { color:#000; }
+    .footer a { color:#000; text-decoration:none; font-weight:700; }
   </style>
 </head>
 <body>
   <div class="certificate">
-    <table class="header">
-      <tr>
-        <td class="logo" colspan="2"><img src="{$logo_url}" alt="Logo HSEQ"></td>
-      </tr>
-      <tr>
-        <td class="title" colspan="2">
-          <strong>Certificado de formación y entrenamiento<br>para trabajos en alturas</strong>
-          <br><small>MINTRABAJO N° RADICADO 08SE2018220000000030200</small>
-        </td>
-      </tr>
-    </table>
+    <div class="content">
+      <div class="header-grid">
+        <div class="logo">
+          <img src="{$logo_url}" alt="Logo HSEQ">
+          <div class="nit">NIT: 900.673.522-6</div>
+        </div>
+        <div class="header-meta">
+          <div class="title-sub">CERTIFICADO DE FORMACIÓN Y ENTRENAMIENTO</div>
+          <div class="title-sub">PARA TRABAJOS EN ALTURAS</div>
+          <div class="radicado">MINTRABAJO N° RADICADO 08SE2018220000000030200</div>
+        </div>
+      </div>
 
-    <div class="section">
-      <div class="label"><strong>Certifica que:</strong></div>
-      <div class="value">{$nombre_completo}</div>
-    </div>
+      <div class="cert-label">Certifica que:</div>
+      <div class="field">{$nombre_completo}</div>
 
-    <div class="section">
-      <div class="label"><strong>Cursó y aprobó la formación y entrenamiento en:</strong></div>
-      <div class="value">"{$nombre_curso}"</div>
-    </div>
+      <div class="cert-label">Curso y aprobó la formación y entrenamiento en:</div>
+      <div class="field course-field">{$nombre_curso}</div>
 
-    <table class="details">
-      <tr><th>Intensidad</th><td>{$intensidad_horaria} horas, bajo la resolución {$resolucion_mintrabajo}</td></tr>
-      <tr><th>Realizado en</th><td>{$ciudad_expedicion} entre el {$fecha_inicio_curso} y el {$fecha_realizado}</td></tr>
-      <tr><th>Expedido en</th><td>{$ciudad_expedicion}, el {$fecha_expedicion}</td></tr>
-      <tr><th>Validación del certificado</th><td>NCI - HSEQ - {$codigo_validacion}</td></tr>
-      <tr><th>NIT empresa empleadora</th><td>{$nit_empresa}</td></tr>
-      <tr><th>Representante legal empresa empleadora</th><td>{$representante_legal_empleadora}</td></tr>
-      <tr><th>ARL</th><td>{$arl}</td></tr>
-    </table>
+      <div class="detail-row"><div class="detail-label">Con una intensidad de:</div><div class="detail-value">{$intensidad_horaria} horas, bajo la Resolución {$resolucion_mintrabajo}</div></div>
+      <div class="detail-row"><div class="detail-label">Realizado en la ciudad de:</div><div class="detail-value">{$ciudad_expedicion}, entre el {$fecha_inicio_curso} y el {$fecha_realizado}</div></div>
+      <div class="detail-row"><div class="detail-label">Expedido en la ciudad de:</div><div class="detail-value">{$ciudad_expedicion}, el {$fecha_expedicion}</div></div>
+      <div class="detail-row"><div class="detail-label">Nit de la empresa empleadora</div><div class="detail-value">{$nit_empresa}</div></div>
+      <div class="detail-row"><div class="detail-label">Representante legal de la empresa</div><div class="detail-value">{$representante_legal_empleadora}</div></div>
+      <div class="detail-row"><div class="detail-label">ARL</div><div class="detail-value">{$arl}</div></div>
 
-    <table class="signatures">
-      <tr>
-        <td>
-          <div class="sign-line">{$trainer_signature_html}</div>
+      <div class="validation-box">NCI - HSEQ - {$codigo_validacion}</div>
+
+      <div class="signatures">
+        <div class="signature">
+          <div class="line">{$trainer_signature_html}</div>
           <p>{$trainer_name}<br>Entrenador trabajo en altura<br>Licencia SST: {$trainer_license}</p>
-        </td>
-        <td>
-          <div class="sign-line">&nbsp;</div>
+        </div>
+        <div class="signature">
+          <div class="line">&nbsp;</div>
           <p>{$representante_legal_certificadora}<br>Representante legal</p>
-        </td>
-      </tr>
-    </table>
+        </div>
+      </div>
 
-    <div class="footer">
-      <p>{$licencia_sst_hseq}</p>
-      <p>Este diploma puede ser verificado llamando al número <strong>{$telefonos_verificacion}</strong></p>
-      <p>La autenticidad de este documento puede ser verificada en el registro electrónico en <a href="{$url_verificacion_web}" target="_blank">{$web_verificacion_display}</a></p>
+      <div class="footer">
+        <p>{$licencia_sst_hseq}</p>
+        <p>Este diploma puede ser verificado llamando al número <strong>{$telefonos_verificacion}</strong></p>
+        <p>La autenticidad de este documento puede ser verificada en el registro electrónico en <a href="{$url_verificacion_web}" target="_blank">{$web_verificacion_display}</a></p>
+      </div>
     </div>
   </div>
 </body>
@@ -1286,6 +2126,290 @@ function gcp_add_students_submenu_page() {
     );
 }
 add_action( 'admin_menu', 'gcp_add_students_submenu_page' );
+
+/**
+ * Submenu para personalizar la plantilla del certificado usando shortcodes.
+ */
+function gcp_add_customize_certificate_submenu_page() {
+    add_submenu_page(
+        'gcp_generar_certificado',
+        __( 'Personalizar certificado', 'gcp-generador-cert' ),
+        __( 'Personalizar certificado', 'gcp-generador-cert' ),
+        'manage_options',
+        'gcp_personalizar_certificado',
+        'gcp_render_personalizar_certificado_page'
+    );
+}
+add_action( 'admin_menu', 'gcp_add_customize_certificate_submenu_page' );
+
+/**
+ * Allow downloading the base HTML template as a starting point.
+ */
+function gcp_handle_download_certificate_template() {
+    if ( ! is_admin() ) {
+        return;
+    }
+
+    if ( ! isset( $_GET['gcp_download_certificate_template'] ) ) {
+        return;
+    }
+
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_die( __( 'No tienes permisos suficientes para descargar la plantilla.', 'gcp-generador-cert' ) );
+    }
+
+    $nonce = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
+    if ( ! wp_verify_nonce( $nonce, 'gcp_download_certificate_template' ) ) {
+        wp_die( __( 'Nonce inválido al descargar la plantilla.', 'gcp-generador-cert' ) );
+    }
+
+    $template = gcp_get_default_certificate_custom_template();
+
+    nocache_headers();
+    header( 'Content-Type: text/html; charset=utf-8' );
+    header( 'Content-Disposition: attachment; filename="plantilla-certificado.html"' );
+    echo $template; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+    exit;
+}
+add_action( 'admin_init', 'gcp_handle_download_certificate_template' );
+
+/**
+ * Render the customization page that lets admins edit the certificate template.
+ */
+function gcp_render_personalizar_certificado_page() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_die( __( 'No tienes permisos suficientes para acceder a esta página.', 'gcp-generador-cert' ) );
+    }
+
+    $mpdf_status   = gcp_get_mpdf_status();
+    $mpdf_message  = $mpdf_status['available']
+        ? sprintf(
+            /* translators: %s: mPDF version number. */
+            __( 'mPDF está activo%1$s para generar el PDF con tu plantilla.', 'gcp-generador-cert' ),
+            $mpdf_status['version'] ? ' (v' . esc_html( $mpdf_status['version'] ) . ')' : ''
+        )
+        : __( 'mPDF no está disponible. Asegúrate de tener la carpeta vendor con mpdf/mpdf antes de generar certificados.', 'gcp-generador-cert' );
+
+    $bg_diag = gcp_get_certificate_background_diagnostics();
+    $bg_ok   = $bg_diag['ok_for_mpdf'];
+
+    $notice = '';
+    $error  = '';
+    $imported_from_file = '';
+
+    if ( isset( $_POST['gcp_personalizar_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['gcp_personalizar_nonce'] ) ), 'gcp_personalizar_certificado' ) ) {
+        $reset = isset( $_POST['gcp_reset_template'] );
+        if ( $reset ) {
+            delete_option( 'gcp_certificate_custom_template' );
+            delete_option( 'gcp_certificate_custom_styles' );
+            delete_option( 'gcp_certificate_background_url' );
+            $notice = __( 'La plantilla volvió al diseño predeterminado.', 'gcp-generador-cert' );
+        } else {
+            $uploaded_template = '';
+            if ( isset( $_FILES['gcp_template_file'] ) && ! empty( $_FILES['gcp_template_file']['tmp_name'] ) ) {
+                $file = $_FILES['gcp_template_file'];
+                if ( UPLOAD_ERR_OK !== $file['error'] ) {
+                    $error = __( 'No se pudo subir el archivo de plantilla. Intenta nuevamente.', 'gcp-generador-cert' );
+                } else {
+                    $allowed_template_types = array(
+                        'html' => 'text/html',
+                        'htm'  => 'text/html',
+                    );
+                    $checked = wp_check_filetype_and_ext( $file['tmp_name'], $file['name'], $allowed_template_types );
+                    if ( empty( $checked['ext'] ) ) {
+                        $error = __( 'Solo se aceptan archivos .html con los shortcodes en tu diseño.', 'gcp-generador-cert' );
+                    } else {
+                        $uploaded_template   = file_get_contents( $file['tmp_name'] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+                        $imported_from_file  = sanitize_text_field( $file['name'] );
+                    }
+                }
+            }
+
+            $template_raw = isset( $_POST['gcp_custom_template'] ) ? wp_unslash( $_POST['gcp_custom_template'] ) : '';
+            $styles_raw   = isset( $_POST['gcp_custom_styles'] ) ? wp_unslash( $_POST['gcp_custom_styles'] ) : '';
+            $bg_raw       = isset( $_POST['gcp_background_url'] ) ? wp_unslash( $_POST['gcp_background_url'] ) : '';
+
+            if ( '' !== $uploaded_template ) {
+                $template = current_user_can( 'unfiltered_html' ) ? $uploaded_template : wp_kses_post( $uploaded_template );
+            } else {
+                $template = current_user_can( 'unfiltered_html' ) ? $template_raw : wp_kses_post( $template_raw );
+            }
+            $styles   = current_user_can( 'unfiltered_html' ) ? $styles_raw : wp_strip_all_tags( $styles_raw );
+            $bg_url   = esc_url_raw( trim( $bg_raw ) );
+
+            update_option( 'gcp_certificate_custom_template', $template );
+            update_option( 'gcp_certificate_custom_styles', $styles );
+
+            if ( '' === $bg_url ) {
+                delete_option( 'gcp_certificate_background_url' );
+            } else {
+                $allowed_backgrounds = array(
+                    'png'  => 'image/png',
+                    'jpg'  => 'image/jpeg',
+                    'jpeg' => 'image/jpeg',
+                );
+                $filetype = wp_check_filetype( $bg_url, $allowed_backgrounds );
+                if ( empty( $filetype['ext'] ) ) {
+                    $error = __( 'El fondo debe ser una imagen PNG o JPG. No se guardó la URL proporcionada.', 'gcp-generador-cert' );
+                } else {
+                    update_option( 'gcp_certificate_background_url', $bg_url );
+                }
+            }
+
+            if ( ! $error ) {
+                $notice = $imported_from_file
+                    ? sprintf( __( 'Plantilla importada desde %s y guardada correctamente.', 'gcp-generador-cert' ), esc_html( $imported_from_file ) )
+                    : __( 'Plantilla personalizada guardada correctamente.', 'gcp-generador-cert' );
+            }
+        }
+    }
+
+    $saved_template = get_option( 'gcp_certificate_custom_template', '' );
+    $saved_styles   = get_option( 'gcp_certificate_custom_styles', '' );
+    $saved_bg_url   = get_option( 'gcp_certificate_background_url', '' );
+    $template_value = $saved_template ? $saved_template : gcp_get_default_certificate_custom_template();
+    $styles_value   = $saved_styles ? $saved_styles : gcp_get_default_certificate_custom_styles();
+    $shortcodes     = gcp_get_certificate_shortcode_catalog();
+    ?>
+    <div class="wrap gcp-customizer-page">
+        <h1><?php esc_html_e( 'Personalizar certificado', 'gcp-generador-cert' ); ?></h1>
+        <p class="description"><?php esc_html_e( 'Edita el HTML y el CSS de tu certificado. Usa los shortcodes para ubicar los datos dinámicos exactamente donde los necesites.', 'gcp-generador-cert' ); ?></p>
+
+        <div class="gcp-mpdf-status <?php echo $mpdf_status['available'] ? 'gcp-mpdf-ok' : 'gcp-mpdf-missing'; ?>">
+            <span class="dashicons <?php echo $mpdf_status['available'] ? 'dashicons-yes' : 'dashicons-warning'; ?>" aria-hidden="true"></span>
+            <div class="gcp-mpdf-status__text">
+                <strong><?php echo esc_html( $mpdf_message ); ?></strong>
+                <?php if ( ! $mpdf_status['available'] ) : ?>
+                    <span class="description"><?php esc_html_e( 'La generación del PDF usa mPDF, ubicado en la carpeta vendor. Verifica que vendor/autoload.php exista en el plugin.', 'gcp-generador-cert' ); ?></span>
+                <?php else : ?>
+                    <span class="description"><?php esc_html_e( 'Si cambias el diseño, el PDF usará mPDF para respetar tu HTML, CSS y fondo personalizado.', 'gcp-generador-cert' ); ?></span>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="gcp-bg-status <?php echo $bg_ok ? 'gcp-bg-ok' : 'gcp-bg-warning'; ?>">
+            <span class="dashicons <?php echo $bg_ok ? 'dashicons-format-image' : 'dashicons-warning'; ?>" aria-hidden="true"></span>
+            <div class="gcp-bg-status__text">
+                <strong><?php esc_html_e( 'Estado del fondo del certificado', 'gcp-generador-cert' ); ?></strong>
+                <ul class="gcp-bg-status__list">
+                    <li><?php esc_html_e( 'URL seleccionada:', 'gcp-generador-cert' ); ?> <code><?php echo esc_html( $bg_diag['selected'] ); ?></code></li>
+                    <li><?php esc_html_e( 'URL resuelta para el PDF:', 'gcp-generador-cert' ); ?> <code><?php echo $bg_diag['resolved'] ? esc_html( substr( $bg_diag['resolved'], 0, 120 ) . ( strlen( $bg_diag['resolved'] ) > 120 ? '…' : '' ) ) : __( 'No disponible', 'gcp-generador-cert' ); ?></code></li>
+                    <li><?php esc_html_e( 'Tipo detectado:', 'gcp-generador-cert' ); ?> <?php echo esc_html( $bg_diag['filetype']['ext'] ? strtoupper( $bg_diag['filetype']['ext'] ) : __( 'desconocido', 'gcp-generador-cert' ) ); ?></li>
+                    <?php if ( $bg_diag['http_status'] ) : ?>
+                        <li><?php esc_html_e( 'Código HTTP al intentar leer la imagen:', 'gcp-generador-cert' ); ?> <?php echo esc_html( $bg_diag['http_status'] ); ?></li>
+                    <?php endif; ?>
+                    <?php if ( $bg_diag['content_type_head'] ) : ?>
+                        <li><?php esc_html_e( 'Content-Type reportado:', 'gcp-generador-cert' ); ?> <?php echo esc_html( $bg_diag['content_type_head'] ); ?></li>
+                    <?php endif; ?>
+                    <?php if ( $bg_diag['http_error'] ) : ?>
+                        <li><?php esc_html_e( 'Error al consultar la imagen:', 'gcp-generador-cert' ); ?> <?php echo esc_html( $bg_diag['http_error'] ); ?></li>
+                    <?php endif; ?>
+                    <?php if ( $bg_diag['resolved_is_data'] ) : ?>
+                        <li><?php esc_html_e( 'La imagen fue incrustada como data URI para mejorar la compatibilidad de mPDF.', 'gcp-generador-cert' ); ?></li>
+                    <?php endif; ?>
+                    <?php if ( ! empty( $bg_diag['notes'] ) ) : ?>
+                        <?php foreach ( $bg_diag['notes'] as $note ) : ?>
+                            <li><?php echo wp_kses_post( $note ); ?></li>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </ul>
+            </div>
+        </div>
+
+        <?php if ( $notice ) : ?>
+            <div class="notice notice-success is-dismissible"><p><?php echo esc_html( $notice ); ?></p></div>
+        <?php endif; ?>
+        <?php if ( $error ) : ?>
+            <div class="notice notice-error is-dismissible"><p><?php echo esc_html( $error ); ?></p></div>
+        <?php endif; ?>
+
+        <form method="post" enctype="multipart/form-data">
+            <?php wp_nonce_field( 'gcp_personalizar_certificado', 'gcp_personalizar_nonce' ); ?>
+            <table class="form-table" role="presentation">
+                <tbody>
+                    <tr>
+                        <th scope="row"><label for="gcp_template_file"><?php esc_html_e( 'Sube tu diseño en HTML', 'gcp-generador-cert' ); ?></label></th>
+                        <td>
+                            <input type="file" id="gcp_template_file" name="gcp_template_file" accept=".html,.htm">
+                            <p class="description"><?php esc_html_e( 'Crea tu certificado en HTML, coloca los shortcodes donde quieras los datos (por ejemplo, [nombre_completo]) y súbelo aquí.', 'gcp-generador-cert' ); ?></p>
+                            <p class="description"><?php esc_html_e( 'Si prefieres editar en pantalla, también puedes ajustar el HTML directamente en el campo de abajo.', 'gcp-generador-cert' ); ?></p>
+                            <?php $download_nonce = wp_create_nonce( 'gcp_download_certificate_template' ); ?>
+                            <p class="description">
+                                <a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=gcp_personalizar_certificado&gcp_download_certificate_template=1&_wpnonce=' . $download_nonce ) ); ?>">
+                                    <?php esc_html_e( 'Descargar plantilla base', 'gcp-generador-cert' ); ?>
+                                </a>
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="gcp_custom_template"><?php esc_html_e( 'HTML de la plantilla', 'gcp-generador-cert' ); ?></label></th>
+                        <td>
+                            <textarea id="gcp_custom_template" name="gcp_custom_template" rows="16" class="large-text code" spellcheck="false"><?php echo esc_textarea( $template_value ); ?></textarea>
+                            <p class="description"><?php esc_html_e( 'Se reemplazarán automáticamente los shortcodes entre corchetes con los datos del certificado. Usa el botón “Ver shortcodes” para copiar los que necesites.', 'gcp-generador-cert' ); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="gcp_custom_styles"><?php esc_html_e( 'CSS adicional', 'gcp-generador-cert' ); ?></label></th>
+                        <td>
+                            <textarea id="gcp_custom_styles" name="gcp_custom_styles" rows="8" class="large-text code" spellcheck="false"><?php echo esc_textarea( $styles_value ); ?></textarea>
+                            <p class="description"><?php esc_html_e( 'Este CSS se insertará en la cabecera del certificado si el HTML incluye la etiqueta <head>.', 'gcp-generador-cert' ); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="gcp_background_url"><?php esc_html_e( 'Fondo del certificado (opcional)', 'gcp-generador-cert' ); ?></label></th>
+                        <td>
+                            <input type="url" id="gcp_background_url" name="gcp_background_url" class="regular-text" value="<?php echo esc_attr( $saved_bg_url ); ?>" placeholder="https://tusitio.com/wp-content/uploads/fondo-certificado.png">
+                            <p class="description"><?php esc_html_e( 'Pega la URL de una imagen PNG o JPG de tu biblioteca de medios. Déjalo vacío para usar el fondo predeterminado.', 'gcp-generador-cert' ); ?></p>
+                            <p class="description"><?php esc_html_e( 'Sugerencia: usa imágenes verticales (A4) de al menos 1200 px de ancho, colores suaves y sin transparencias extremas para que el fondo se vea completo tras el filtro de lectura del texto.', 'gcp-generador-cert' ); ?></p>
+                            <p class="description"><?php esc_html_e( 'En tu HTML/CSS personalizado usa el shortcode [background_url_resolved] dentro de url(...) para que el fondo cargue también en el PDF (ejemplo: background-image: url("[background_url_resolved]");).', 'gcp-generador-cert' ); ?></p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="submit">
+                <button type="submit" class="button button-primary"><?php esc_html_e( 'Guardar cambios', 'gcp-generador-cert' ); ?></button>
+                <button type="submit" class="button" name="gcp_reset_template" value="1">
+                    <?php esc_html_e( 'Restablecer a la plantilla base', 'gcp-generador-cert' ); ?>
+                </button>
+            </p>
+        </form>
+
+        <div class="gcp-customizer-grid">
+            <div class="gcp-customizer-card">
+                <h3><?php esc_html_e( 'Pasos rápidos', 'gcp-generador-cert' ); ?></h3>
+                <ol class="gcp-customizer-steps">
+                    <li><?php esc_html_e( 'Descarga la plantilla base y ábrela en tu editor favorito.', 'gcp-generador-cert' ); ?></li>
+                    <li><?php esc_html_e( 'Coloca los shortcodes (por ejemplo, [nombre_completo], [cedula]) justo donde quieras ver los datos.', 'gcp-generador-cert' ); ?></li>
+                    <li><?php esc_html_e( 'Carga el archivo .html ya maquetado y guarda para usarlo en el próximo certificado.', 'gcp-generador-cert' ); ?></li>
+                </ol>
+            </div>
+            <div class="gcp-customizer-card">
+                <h3><?php esc_html_e( 'Tip para el fondo', 'gcp-generador-cert' ); ?></h3>
+                <p class="description"><?php esc_html_e( 'Usa un PNG o JPG vertical (A4), mínimo 1200 px de ancho, sin transparencias extremas y con colores suaves para que el texto se lea bien.', 'gcp-generador-cert' ); ?></p>
+                <p class="description"><?php esc_html_e( 'Pega la URL del fondo y reutilízalo en todos tus diseños personalizados.', 'gcp-generador-cert' ); ?></p>
+            </div>
+            <div class="gcp-customizer-card">
+                <h3><?php esc_html_e( 'Atajo para el fondo en tu HTML', 'gcp-generador-cert' ); ?></h3>
+                <p class="description"><?php esc_html_e( 'Inserta el shortcode resuelto en tu CSS para que el fondo se pinte también en el PDF.', 'gcp-generador-cert' ); ?></p>
+                <p class="description"><?php esc_html_e( 'mPDF recomienda usar background-image-resize=6; evita cover y usa proporción completa (100% auto).', 'gcp-generador-cert' ); ?></p>
+                <pre class="gcp-code-block">.cert-wrapper::before {
+  background-image: url('[background_url_resolved]');
+  background-size: 100% auto; /* mPDF: usa resize 6 */
+}</pre>
+                <p class="description"><?php esc_html_e( 'Si prefieres la URL sin procesar, usa [background_url].', 'gcp-generador-cert' ); ?></p>
+            </div>
+        </div>
+
+        <h2><?php esc_html_e( 'Shortcodes disponibles', 'gcp-generador-cert' ); ?></h2>
+        <p class="description"><?php esc_html_e( 'Coloca estos shortcodes en cualquier parte de tu HTML. También se reemplazarán otros campos personalizados si coinciden con el nombre del campo (por ejemplo, [etapa_del_curso]).', 'gcp-generador-cert' ); ?></p>
+        <ul class="gcp-shortcode-list">
+            <?php foreach ( $shortcodes as $code => $label ) : ?>
+                <li><code>[<?php echo esc_html( $code ); ?>]</code> — <?php echo esc_html( $label ); ?></li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+    <?php
+}
 
 /**
  * Add the verification submenu page.
@@ -1454,6 +2578,7 @@ function gcp_render_verificacion_admision_page() {
             <p class="submit">
                 <button type="button" id="gcp-register-verification-button" class="button button-primary"><?php _e( 'Verificación de Admisión', 'gcp-generador-cert' ); ?></button>
             </p>
+            <div id="gcp-verification-notice" style="margin-top: 15px;"></div>
         </form>
     </div>
     <?php
@@ -1749,6 +2874,7 @@ function gcp_attach_custom_fields_to_student_records( $records, $custom_field_la
 }
 
 add_action( 'admin_init', 'gcp_handle_export_estudiantes' );
+add_action( 'admin_init', 'gcp_handle_export_certificados' );
 
 /**
  * Allow exporting the students table as CSV.
@@ -1847,6 +2973,100 @@ function gcp_handle_export_estudiantes() {
 
             fputcsv( $output, $row );
         }
+    }
+
+    fclose( $output );
+    exit;
+}
+
+/**
+ * Allow exporting the certificates table as CSV.
+ */
+function gcp_handle_export_certificados() {
+    if ( empty( $_GET['page'] ) || 'gcp_administrar_certificados' !== $_GET['page'] ) {
+        return;
+    }
+
+    if ( empty( $_GET['gcp_export'] ) || 'csv' !== $_GET['gcp_export'] ) {
+        return;
+    }
+
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+
+    $nonce = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
+    if ( ! wp_verify_nonce( $nonce, 'gcp_export_certificates' ) ) {
+        wp_die( __( 'Error de seguridad: Nonce inválido.', 'gcp-generador-cert' ) );
+    }
+
+    $filters = gcp_get_certificate_filters_from_request();
+    $data    = gcp_get_enriched_certificates_data( $filters );
+
+    $filename = 'certificados-emitidos-' . gmdate( 'Ymd-His' ) . '.csv';
+
+    header( 'Content-Type: text/csv; charset=utf-8' );
+    header( 'Content-Disposition: attachment; filename=' . $filename );
+
+    $output = fopen( 'php://output', 'w' );
+
+    $custom_field_labels = gcp_get_all_fluentcrm_custom_field_labels();
+    $custom_field_count  = ! empty( $custom_field_labels ) ? count( $custom_field_labels ) : 0;
+    $cert_table_colspan  = 14 + $custom_field_count; // Columnas base + campos personalizados
+
+    $headers = array(
+        'ID Certificado',
+        'Cédula',
+        'Nombre',
+        'Apellido',
+        'Email',
+        'Curso (Certificado)',
+        'Curso (Registro)',
+        'Etapa del curso',
+        'Nombre Empresa',
+        'NIT Empresa',
+        'Fecha Inscripción',
+        'Fecha Emisión',
+        'ID Validación',
+        'Archivo',
+    );
+
+    if ( ! empty( $custom_field_labels ) ) {
+        foreach ( $custom_field_labels as $label ) {
+            $headers[] = $label;
+        }
+    }
+
+    fputcsv( $output, $headers );
+
+    foreach ( $data as $row ) {
+        $date_verified = ! empty( $row['date_verified'] ) ? mysql2date( 'Y-m-d H:i:s', $row['date_verified'] ) : '';
+        $date_issued   = ! empty( $row['date_issued'] ) ? mysql2date( 'Y-m-d H:i:s', $row['date_issued'] ) : '';
+
+        $csv_row = array(
+            $row['id'],
+            $row['cedula_alumno'],
+            $row['first_name'],
+            $row['last_name'],
+            $row['email'],
+            $row['course_name_cert'],
+            $row['course_name_verified'],
+            $row['etapa_del_curso'],
+            $row['nombre_empresa'],
+            $row['nit_empresa'],
+            $date_verified,
+            $date_issued,
+            $row['validation_id'],
+            $row['certificate_filename'],
+        );
+
+        if ( ! empty( $custom_field_labels ) ) {
+            foreach ( $custom_field_labels as $slug => $label ) {
+                $csv_row[] = isset( $row['custom_fields'][ $slug ] ) ? $row['custom_fields'][ $slug ] : '';
+            }
+        }
+
+        fputcsv( $output, $csv_row );
     }
 
     fclose( $output );
@@ -2158,26 +3378,23 @@ add_action( 'admin_init', 'gcp_handle_delete_certificate_action' ); // admin_ini
  * Renderiza el contenido de la página de administración de certificados.
  */
 function gcp_render_administrar_certificados_page() {
-    global $wpdb;
-    $table_name = $wpdb->prefix . 'gcp_issued_certificates';
+    $filters      = gcp_get_certificate_filters_from_request();
+    $certificates = gcp_get_enriched_certificates_data( $filters );
 
-    $search_cedula = isset( $_GET['s_cedula'] ) ? sanitize_text_field( trim( $_GET['s_cedula'] ) ) : '';
+    $export_url = add_query_arg(
+        array(
+            'page'       => 'gcp_administrar_certificados',
+            's_cedula'   => $filters['cedula'],
+            's_nit'      => $filters['nit'],
+            's_course'   => $filters['course'],
+            'gcp_export' => 'csv',
+            '_wpnonce'   => wp_create_nonce( 'gcp_export_certificates' ),
+        ),
+        admin_url( 'admin.php' )
+    );
 
-    // Preparar consulta SQL
-    $sql = "SELECT id, cedula_alumno, course_name, certificate_filename, certificate_url, date_issued, validation_id FROM {$table_name}";
-    $params = array();
-
-    if ( ! empty( $search_cedula ) ) {
-        $sql .= " WHERE cedula_alumno = %s";
-        $params[] = $search_cedula;
-    }
-    $sql .= " ORDER BY date_issued DESC";
-
-    if ( ! empty( $params ) ) {
-        $certificates = $wpdb->get_results( $wpdb->prepare( $sql, $params ) );
-    } else {
-        $certificates = $wpdb->get_results( $sql );
-    }
+    $custom_field_labels = gcp_get_all_fluentcrm_custom_field_labels();
+    $cert_table_colspan  = 9; // Columnas visibles en la fila principal
     ?>
     <div class="wrap">
         <h1><?php _e( 'Administrar Certificados Emitidos', 'gcp-generador-cert' ); ?></h1>
@@ -2188,65 +3405,312 @@ function gcp_render_administrar_certificados_page() {
             <input type="hidden" name="page" value="gcp_administrar_certificados">
             <p class="search-box">
                 <label class="screen-reader-text" for="gcp-cedula-search-input"><?php _e( 'Buscar por Cédula:', 'gcp-generador-cert' ); ?></label>
-                <input type="search" id="gcp-cedula-search-input" name="s_cedula" value="<?php echo esc_attr( $search_cedula ); ?>" placeholder="<?php _e( 'Ingrese Cédula', 'gcp-generador-cert' ); ?>">
-                <input type="submit" id="search-submit" class="button" value="<?php _e( 'Buscar Cédula', 'gcp-generador-cert' ); ?>">
-                <?php if ( ! empty( $search_cedula ) ) : ?>
+                <input type="search" id="gcp-cedula-search-input" name="s_cedula" value="<?php echo esc_attr( $filters['cedula'] ); ?>" placeholder="<?php _e( 'Ingrese Cédula', 'gcp-generador-cert' ); ?>">
+
+                <label class="screen-reader-text" for="gcp-nit-search-input"><?php _e( 'Buscar por NIT:', 'gcp-generador-cert' ); ?></label>
+                <input type="search" id="gcp-nit-search-input" name="s_nit" value="<?php echo esc_attr( $filters['nit'] ); ?>" placeholder="<?php _e( 'Ingrese NIT', 'gcp-generador-cert' ); ?>">
+
+                <label class="screen-reader-text" for="gcp-course-search-input"><?php _e( 'Buscar por Curso:', 'gcp-generador-cert' ); ?></label>
+                <input type="search" id="gcp-course-search-input" name="s_course" value="<?php echo esc_attr( $filters['course'] ); ?>" placeholder="<?php _e( 'Ingrese Curso', 'gcp-generador-cert' ); ?>">
+
+                <input type="submit" id="search-submit" class="button" value="<?php _e( 'Buscar', 'gcp-generador-cert' ); ?>">
+                <?php if ( ! empty( $filters['cedula'] ) || ! empty( $filters['nit'] ) || ! empty( $filters['course'] ) ) : ?>
                     <a href="<?php echo esc_url( admin_url('admin.php?page=gcp_administrar_certificados') ); ?>" class="button" style="margin-left: 5px;"><?php _e( 'Mostrar Todos', 'gcp-generador-cert' ); ?></a>
                 <?php endif; ?>
+                <a href="<?php echo esc_url( $export_url ); ?>" class="button button-primary" style="margin-left:5px;">
+                    <?php _e( 'Exportar CSV', 'gcp-generador-cert' ); ?>
+                </a>
             </p>
         </form>
 
-        <table class="wp-list-table widefat fixed striped">
+        <table id="gcp-certificates-table" class="wp-list-table widefat fixed striped gcp-certificates-table">
             <thead>
                 <tr>
                     <th scope="col"><?php _e( 'Cédula Alumno', 'gcp-generador-cert' ); ?></th>
-                    <th scope="col"><?php _e( 'Curso', 'gcp-generador-cert' ); ?></th>
+                    <th scope="col"><?php _e( 'Nombre', 'gcp-generador-cert' ); ?></th>
+                    <th scope="col"><?php _e( 'Email', 'gcp-generador-cert' ); ?></th>
+                    <th scope="col"><?php _e( 'Curso (Cert.)', 'gcp-generador-cert' ); ?></th>
                     <th scope="col"><?php _e( 'Fecha Emisión', 'gcp-generador-cert' ); ?></th>
                     <th scope="col"><?php _e( 'ID Validación', 'gcp-generador-cert' ); ?></th>
                     <th scope="col"><?php _e( 'Archivo', 'gcp-generador-cert' ); ?></th>
+                    <th scope="col"><?php _e( 'Detalles', 'gcp-generador-cert' ); ?></th>
                     <th scope="col"><?php _e( 'Acciones', 'gcp-generador-cert' ); ?></th>
                 </tr>
             </thead>
             <tbody>
                 <?php if ( ! empty( $certificates ) ) : ?>
                     <?php foreach ( $certificates as $cert ) : ?>
+                        <?php
+                        $full_name        = trim( $cert['first_name'] . ' ' . $cert['last_name'] );
+                        $course_registro  = ! empty( $cert['course_name_verified'] ) ? $cert['course_name_verified'] : __( 'Sin registro', 'gcp-generador-cert' );
+                        $company_name     = ! empty( $cert['nombre_empresa'] ) ? $cert['nombre_empresa'] : __( 'No informado', 'gcp-generador-cert' );
+                        $custom_field_map = array();
+
+                        if ( ! empty( $custom_field_labels ) ) {
+                            foreach ( $custom_field_labels as $slug => $label ) {
+                                if ( isset( $cert['custom_fields'][ $slug ] ) && '' !== $cert['custom_fields'][ $slug ] ) {
+                                    $custom_field_map[ $label ] = $cert['custom_fields'][ $slug ];
+                                }
+                            }
+                        }
+                        ?>
                         <tr>
-                            <td><?php echo esc_html( $cert->cedula_alumno ); ?></td>
-                            <td><?php echo esc_html( $cert->course_name ); ?></td>
-                            <td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $cert->date_issued ) ) ); ?></td>
-                            <td><?php echo esc_html( $cert->validation_id ? $cert->validation_id : 'N/A' ); ?></td>
+                            <td><?php echo esc_html( $cert['cedula_alumno'] ); ?></td>
+                            <td><?php echo esc_html( $full_name ); ?></td>
+                            <td><?php echo esc_html( $cert['email'] ); ?></td>
+                            <td><?php echo esc_html( $cert['course_name_cert'] ); ?></td>
+                            <td><?php echo esc_html( $cert['date_issued_display'] ); ?></td>
+                            <td><?php echo esc_html( $cert['validation_id'] ); ?></td>
                             <td>
-                                <?php if ( ! empty( $cert->certificate_url ) ) : ?>
-                                    <a href="<?php echo esc_url( $cert->certificate_url ); ?>" target="_blank">
-                                        <?php echo esc_html( $cert->certificate_filename ); ?>
+                                <?php if ( ! empty( $cert['certificate_url'] ) ) : ?>
+                                    <a href="<?php echo esc_url( $cert['certificate_url'] ); ?>" target="_blank">
+                                        <?php echo esc_html( $cert['certificate_filename'] ); ?>
                                     </a>
                                 <?php else : ?>
                                     <?php _e( 'No disponible', 'gcp-generador-cert' ); ?>
                                 <?php endif; ?>
                             </td>
                             <td>
+                                <button type="button" class="button button-secondary gcp-toggle-cert-details" aria-expanded="false">
+                                    <?php _e( 'Ver más', 'gcp-generador-cert' ); ?>
+                                </button>
+                            </td>
+                            <td>
                                 <?php
                                 $delete_link = add_query_arg( array(
                                     'action'  => 'gcp_delete_certificate',
-                                    'cert_id' => $cert->id,
-                                    '_wpnonce'=> wp_create_nonce( 'gcp_delete_certificate_' . $cert->id )
+                                    'cert_id' => $cert['id'],
+                                    '_wpnonce'=> wp_create_nonce( 'gcp_delete_certificate_' . $cert['id'] )
                                 ), admin_url( 'admin.php?page=gcp_administrar_certificados' ) ); // Redirige a la misma página admin tras la acción
                                 ?>
-                                <a href="<?php echo esc_url( $delete_link ); ?>" 
+                                <a href="<?php echo esc_url( $delete_link ); ?>"
                                    onclick="return confirm('<?php esc_attr_e( '¿Estás seguro de que deseas eliminar este certificado? Esta acción no se puede deshacer.', 'gcp-generador-cert' ); ?>');"
                                    style="color: #a00;"><?php _e( 'Eliminar', 'gcp-generador-cert' ); ?></a>
+                            </td>
+                        </tr>
+                        <tr class="gcp-cert-details-row">
+                            <td colspan="<?php echo intval( $cert_table_colspan ); ?>">
+                                <div class="gcp-cert-details">
+                                    <div class="gcp-cert-details__header">
+                                        <strong><?php echo esc_html( $full_name ); ?></strong>
+                                        <span class="gcp-cert-details__summary">
+                                            <?php printf(
+                                                /* translators: 1: course from verification, 2: company name */
+                                                __( 'Curso registrado: %1$s · Empresa: %2$s', 'gcp-generador-cert' ),
+                                                esc_html( $course_registro ),
+                                                esc_html( $company_name )
+                                            ); ?>
+                                        </span>
+                                    </div>
+                                    <div class="gcp-cert-details__grid">
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'Nombre', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['first_name'] ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'Apellido', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['last_name'] ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'Curso (Registro)', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $course_registro ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'Etapa del curso', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['etapa_del_curso'] ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'Nombre Empresa', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['nombre_empresa'] ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'NIT Empresa', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['nit_empresa'] ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'Fecha Inscripción', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['date_verified_display'] ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'Fecha Emisión', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['date_issued_display'] ); ?></span>
+                                        </div>
+                                        <div class="gcp-cert-details__item">
+                                            <span class="gcp-cert-details__label"><?php _e( 'ID Validación', 'gcp-generador-cert' ); ?></span>
+                                            <span class="gcp-cert-details__value"><?php echo esc_html( $cert['validation_id'] ); ?></span>
+                                        </div>
+                                    </div>
+
+                                    <?php if ( ! empty( $custom_field_map ) ) : ?>
+                                        <div class="gcp-cert-details__custom">
+                                            <h4><?php _e( 'Campos personalizados', 'gcp-generador-cert' ); ?></h4>
+                                            <div class="gcp-cert-details__grid">
+                                                <?php foreach ( $custom_field_map as $label => $value ) : ?>
+                                                    <div class="gcp-cert-details__item">
+                                                        <span class="gcp-cert-details__label"><?php echo esc_html( $label ); ?></span>
+                                                        <span class="gcp-cert-details__value"><?php echo esc_html( $value ); ?></span>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>
                 <?php else : ?>
                     <tr>
-                        <td colspan="6"><?php _e( 'No se encontraron certificados.', 'gcp-generador-cert' ); ?></td>
+                        <td colspan="<?php echo intval( $cert_table_colspan ); ?>"><?php _e( 'No se encontraron certificados.', 'gcp-generador-cert' ); ?></td>
                     </tr>
                 <?php endif; ?>
             </tbody>
         </table>
     </div>
     <?php
+}
+
+/**
+ * Normalize certificate filters from the current request.
+ *
+ * @return array
+ */
+function gcp_get_certificate_filters_from_request() {
+    return array(
+        'cedula' => isset( $_GET['s_cedula'] ) ? sanitize_text_field( trim( wp_unslash( $_GET['s_cedula'] ) ) ) : '',
+        'nit'    => isset( $_GET['s_nit'] ) ? sanitize_text_field( trim( wp_unslash( $_GET['s_nit'] ) ) ) : '',
+        'course' => isset( $_GET['s_course'] ) ? sanitize_text_field( trim( wp_unslash( $_GET['s_course'] ) ) ) : '',
+    );
+}
+
+/**
+ * Retrieve certificate rows enriched with student data and formatted values.
+ *
+ * @param array $filters
+ * @return array
+ */
+function gcp_get_enriched_certificates_data( $filters ) {
+    global $wpdb;
+
+    $cert_table    = $wpdb->prefix . 'gcp_issued_certificates';
+    $verif_table   = $wpdb->prefix . 'gcp_contact_verifications';
+    $custom_labels = gcp_get_all_fluentcrm_custom_field_labels();
+
+    $where  = array();
+    $params = array();
+
+    $sql = "SELECT id, cedula_alumno, fluentcrm_contact_id, course_name, certificate_filename, certificate_url, date_issued, validation_id FROM {$cert_table}";
+
+    if ( ! empty( $filters['cedula'] ) ) {
+        $where[]  = 'cedula_alumno = %s';
+        $params[] = $filters['cedula'];
+    }
+
+    if ( ! empty( $where ) ) {
+        $sql .= ' WHERE ' . implode( ' AND ', $where );
+    }
+
+    $sql .= ' ORDER BY date_issued DESC';
+
+    $cert_rows = ! empty( $params ) ? $wpdb->get_results( $wpdb->prepare( $sql, $params ) ) : $wpdb->get_results( $sql );
+
+    if ( empty( $cert_rows ) ) {
+        return array();
+    }
+
+    $cedulas = array();
+    foreach ( $cert_rows as $row ) {
+        if ( ! empty( $row->cedula_alumno ) ) {
+            $cedulas[] = sanitize_text_field( $row->cedula_alumno );
+        }
+    }
+    $cedulas = array_unique( $cedulas );
+
+    $ver_map = array();
+    if ( ! empty( $cedulas ) ) {
+        $placeholders = implode( ',', array_fill( 0, count( $cedulas ), '%s' ) );
+        $ver_sql      = "SELECT * FROM {$verif_table} WHERE cedula_alumno IN ({$placeholders}) ORDER BY date_verified DESC";
+        $ver_records  = $wpdb->get_results( $wpdb->prepare( $ver_sql, $cedulas ) );
+
+        if ( ! empty( $ver_records ) ) {
+            $ver_records = gcp_attach_custom_fields_to_student_records( $ver_records, $custom_labels );
+            foreach ( $ver_records as $record ) {
+                $key = sanitize_text_field( $record->cedula_alumno );
+                if ( ! isset( $ver_map[ $key ] ) ) {
+                    $ver_map[ $key ] = $record;
+                }
+            }
+        }
+    }
+
+    $results = array();
+
+    foreach ( $cert_rows as $row ) {
+        $cedula     = sanitize_text_field( $row->cedula_alumno );
+        $ver_record = isset( $ver_map[ $cedula ] ) ? $ver_map[ $cedula ] : null;
+
+        $date_verified_display = '';
+        if ( ! empty( $ver_record ) && ! empty( $ver_record->date_verified ) ) {
+            $timestamp = strtotime( $ver_record->date_verified );
+            $date_verified_display = false !== $timestamp ? date_i18n( get_option( 'date_format' ), $timestamp ) : '';
+        }
+
+        $date_issued_display = '';
+        if ( ! empty( $row->date_issued ) ) {
+            $timestamp = strtotime( $row->date_issued );
+            $date_issued_display = false !== $timestamp ? date_i18n( get_option( 'date_format' ), $timestamp ) : '';
+        }
+
+        $composite = array(
+            'id'                    => $row->id,
+            'cedula_alumno'         => $cedula,
+            'first_name'            => $ver_record ? $ver_record->first_name : '',
+            'last_name'             => $ver_record ? $ver_record->last_name : '',
+            'email'                 => $ver_record ? $ver_record->email : '',
+            'course_name_cert'      => $row->course_name,
+            'course_name_verified'  => $ver_record ? $ver_record->course_name : '',
+            'etapa_del_curso'       => $ver_record ? $ver_record->etapa_del_curso : '',
+            'nombre_empresa'        => $ver_record ? $ver_record->nombre_empresa : '',
+            'nit_empresa'           => $ver_record ? $ver_record->nit_empresa : '',
+            'date_verified'         => $ver_record ? $ver_record->date_verified : '',
+            'date_verified_display' => $date_verified_display,
+            'date_issued'           => $row->date_issued,
+            'date_issued_display'   => $date_issued_display,
+            'validation_id'         => ! empty( $row->validation_id ) ? $row->validation_id : 'N/A',
+            'certificate_filename'  => $row->certificate_filename,
+            'certificate_url'       => $row->certificate_url,
+            'custom_fields'         => array(),
+        );
+
+        if ( ! empty( $custom_labels ) ) {
+            foreach ( $custom_labels as $slug => $label ) {
+                $composite['custom_fields'][ $slug ] = '';
+                if ( $ver_record && isset( $ver_record->custom_fields[ $slug ] ) ) {
+                    $composite['custom_fields'][ $slug ] = $ver_record->custom_fields[ $slug ];
+                }
+            }
+        }
+
+        $results[] = $composite;
+    }
+
+    // Filter by NIT when requested (requires verification data).
+    if ( ! empty( $filters['nit'] ) ) {
+        $results = array_values( array_filter( $results, function( $row ) use ( $filters ) {
+            return isset( $row['nit_empresa'] ) && $filters['nit'] === $row['nit_empresa'];
+        } ) );
+    }
+
+    // Filter by course name match (either certificate or verification course).
+    if ( ! empty( $filters['course'] ) ) {
+        $course_filter = mb_strtolower( $filters['course'] );
+        $results       = array_values( array_filter( $results, function( $row ) use ( $course_filter ) {
+            $cert_course = mb_strtolower( $row['course_name_cert'] );
+            $ver_course  = mb_strtolower( $row['course_name_verified'] );
+            return false !== strpos( $cert_course, $course_filter ) || false !== strpos( $ver_course, $course_filter );
+        } ) );
+    }
+
+    return $results;
 }
 
 /**
